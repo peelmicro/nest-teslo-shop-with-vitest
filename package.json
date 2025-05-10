@@ -27,7 +27,6 @@
     "test:vitest": "vitest run",
     "test:vitest:watch": "vitest",
     "test:compare": "echo 'Running Jest tests...' && time npm run test && echo 'Running Vitest tests...' && time npm run test:vitest"
-
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
@@ -59,6 +58,7 @@
     "@nestjs/cli": "^11.0.7",
     "@nestjs/schematics": "^11.0.5",
     "@nestjs/testing": "^11.1.0",
+    "@swc/core": "^1.11.24",
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.1",
     "@types/jest": "29.5.14",

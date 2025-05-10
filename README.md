@@ -22,7 +22,45 @@ npm run test:compare
 
 This project uses a truly framework-agnostic approach to allow tests to run with both Jest and Vitest. The key components are:
 
-### 1. Framework-agnostic Test Utilities
+### 1. SWC with Vitest for Decorator Support
+
+One of the key differences between Jest and Vitest is how they handle TypeScript decorators, especially with class-validator. To solve this issue, we configure Vitest to use SWC (a Rust-based JavaScript/TypeScript compiler) which properly supports decorator metadata:
+
+```typescript
+// vitest.config.ts
+import swc from 'unplugin-swc';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [
+    swc.vite({
+      module: { type: 'es6' },
+      jsc: {
+        target: 'es2021',
+        parser: {
+          syntax: 'typescript',
+          decorators: true,
+          dynamicImport: true,
+        },
+        transform: {
+          legacyDecorator: true,
+          decoratorMetadata: true,
+        },
+      },
+    }),
+  ],
+  test: {
+    globals: true,
+    environment: 'node',
+    setupFiles: './test/vitest-setup.ts',
+    include: ['src/**/*.spec.ts'],
+  },
+});
+```
+
+This configuration allows class-validator decorators to work correctly in Vitest, which otherwise would not work with Vitest's default esbuild transformer.
+
+### 2. Framework-agnostic Test Utilities
 
 The `test/test-utils.ts` file provides a set of utilities that detect which test framework is running and use the appropriate methods:
 
@@ -84,7 +122,7 @@ export const spyOn = testRunner.spyOn;
 export const clearAllMocks = testRunner.clearAllMocks;
 ```
 
-### 2. Generic Framework-specific Setup Files
+### 3. Generic Framework-specific Setup Files
 
 The setup files are now completely framework-agnostic and application-agnostic:
 
@@ -93,7 +131,7 @@ The setup files are now completely framework-agnostic and application-agnostic:
 
 These files handle framework-specific setup without any application-specific code.
 
-### 3. Application-specific Test Helpers
+### 4. Application-specific Test Helpers
 
 In this version, we've moved application-specific mocks to a separate file:
 
@@ -115,7 +153,7 @@ export function createServiceMocks() {
 export { isVitest, fn, spyOn } from '../test/test-utils';
 ```
 
-### 4. Direct Service Instantiation
+### 5. Direct Service Instantiation
 
 Instead of using NestJS TestingModule, our tests now directly instantiate services with mock dependencies:
 
@@ -186,81 +224,36 @@ When writing tests that work with both Jest and Vitest, follow these guidelines:
 
 ## Performance Comparison
 
-Based on our testing, Vitest demonstrates significant performance advantages over Jest when running NestJS tests:
+Based on our latest testing with SWC for Vitest, here's the updated performance comparison:
 
 | Metric | Jest | Vitest | Difference |
 |--------|------|--------|------------|
-| Total time | 27.60s | 7.48s | Vitest is 3.7x faster |
-| CPU usage | 1096% | 890% | Vitest uses 19% less CPU |
-| Memory (max) | 445960k | 127136k | Vitest uses 72% less memory |
-| Page faults | 12452 | 3840 | Vitest has 69% fewer page faults |
+| Total time | 25.82s | 6.73s | Vitest is 3.8x faster |
+| CPU usage | 1068% | 935% | Vitest uses 12.5% less CPU |
+| Memory (max) | 460MB | 175MB | Vitest uses 62% less memory |
+| Page faults | 1520307 | 541655 | Vitest has 64% fewer page faults |
 
 ## Key Implementation Changes in This Version
 
 This version builds on the previous foundation with several important improvements:
 
-1. **Enhanced Spy Handling**: Improved spyOn function that better handles property access issues
-2. **Direct Service Instantiation**: Moved away from TestingModule to simpler direct instantiation
-3. **Application-specific Test Helpers**: Centralized application mocks in src/test-helpers.ts
-4. **Decorator Testing Strategy**: New approach for testing decorators without complex mocking
-5. **Fixed Mock Properties**: Ensured Vitest mocks have expected methods like mockReturnValue
+1. **SWC Integration for Vitest**: Added SWC compiler support for proper decorator metadata handling in Vitest
+2. **Removed Class-Validator Workarounds**: With SWC handling decorator metadata properly, we no longer need special workarounds in DTO validation tests
+3. **Enhanced Spy Handling**: Improved spyOn function that better handles property access issues
+4. **Direct Service Instantiation**: Moved away from TestingModule to simpler direct instantiation
+5. **Application-specific Test Helpers**: Centralized application mocks in src/test-helpers.ts
+6. **Decorator Testing Strategy**: New approach for testing decorators without complex mocking
+7. **Fixed Mock Properties**: Ensured Vitest mocks have expected methods like mockReturnValue
 
-### Important Decorator Testing Pattern
+### Important Notes on Class-Validator and Decorators
 
-One of the key challenges was testing the RoleProtected decorator with both frameworks. Our solution:
+One of the key challenges when working with NestJS and Vitest is handling class-validator decorators. The solution is to:
 
-```typescript
-// Test the decorator based on what it returns, not by mocking
-it('should create a decorator that sets the correct metadata', () => {
-  const roles = [ValidRoles.admin, ValidRoles.user];
-  
-  // The decorator is just a function that returns another function 
-  const decoratorFunction = RoleProtected(...roles);
-  
-  // The decorator factory returns a function that can be applied to a class
-  expect(typeof decoratorFunction).toBe('function');
-  
-  // Create a test class and apply the decorator to it
-  @RoleProtected(...roles)
-  class TestClass {}
-  
-  // Verify the decorator was properly applied
-  expect(TestClass).toBeDefined();
-});
-```
+1. Use SWC instead of esbuild (Vitest's default) for proper decorator metadata support
+2. Ensure 'reflect-metadata' is imported in the vitest setup file
+3. Keep tests simple and focused on behavior rather than implementation details
 
-This approach tests the decorator's behavior without needing to mock the underlying SetMetadata function, which is challenging to do in a framework-agnostic way.
-
-### Implementing Inactive User Testing
-
-We also implemented a test case for handling inactive users that required service modification:
-
-```typescript
-it('should handle user inactive case in login', async () => {
-  const dto = { email: 'inactive@google.com', password: 'Abc123' } as LoginUserDto;
-
-  // Create a user that is inactive
-  const inactiveUser = {
-    id: 'uuid',
-    email: dto.email,
-    password: 'hashed_password',
-    fullName: 'Inactive User',
-    isActive: false, // User is not active
-    roles: ['user'],
-  } as User;
-
-  // Mock findOne to return the inactive user
-  userRepository.findOne.mockResolvedValue(inactiveUser);
-  
-  // Password would be correct, but user is inactive
-  spyOn(bcrypt, 'compareSync').mockReturnValue(true);
-
-  // Expect an exception for inactive users
-  await expect(authService.login(dto)).rejects.toThrow(
-    'User is inactive, please contact an administrator'
-  );
-});
-```
+With these changes, tests that use class-validator now work correctly in both Jest and Vitest environments without any special workarounds.
 
 ## Advantages of Each Framework
 

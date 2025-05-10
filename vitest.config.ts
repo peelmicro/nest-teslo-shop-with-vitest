@@ -1,19 +1,28 @@
+import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  plugins: [
+    swc.vite({
+      module: { type: 'es6' },
+      jsc: {
+        target: 'es2021',
+        parser: {
+          syntax: 'typescript',
+          decorators: true,
+          dynamicImport: true,
+        },
+        transform: {
+          legacyDecorator: true,
+          decoratorMetadata: true,
+        },
+      },
+    }),
+  ],
   test: {
-    environment: 'node',
     globals: true,
+    environment: 'node',
     setupFiles: './test/vitest-setup.ts',
     include: ['src/**/*.spec.ts'],
-    exclude: ['node_modules/', 'dist/'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules/', 'test/'],
-    },
-    alias: {
-      'src': './src',
-    },
   },
 });

@@ -223,67 +223,7 @@ vi.mock('fs', async () => {
   };
 });
 
-// Mock class-validator with framework-agnostic validator
-vi.mock('class-validator', async () => {
-  const originalModule = await vi.importActual('class-validator');
-  
-  // Framework-agnostic validator that allows test files to provide expected results
-  const genericValidate = vi.fn().mockImplementation((obj) => {
-    // Just return empty errors by default - test files should add their own errors
-    return Promise.resolve([]);
-  });
-  
-  return {
-    ...(originalModule || {}),
-    validate: genericValidate,
-    // Common decorators used across NestJS
-    IsString: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsEmail: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsOptional: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsPositive: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsInt: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    Min: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    Max: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsIn: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    Matches: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    MinLength: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    MaxLength: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsUUID: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsBoolean: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsDate: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    }),
-    IsArray: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
-      return typeof target === 'function' ? target : descriptor;
-    })
-  };
-});
+// Note: We're NOT mocking class-validator decorators since SWC handles them
 
 // Mock platform-express for file uploads
 vi.mock('@nestjs/platform-express', async () => {

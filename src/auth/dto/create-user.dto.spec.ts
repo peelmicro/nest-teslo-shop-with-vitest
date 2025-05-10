@@ -1,6 +1,5 @@
 import { validate } from 'class-validator';
 import { CreateUserDto } from './create-user.dto';
-import { isVitest } from '../../../test/test-utils';
 
 describe('CreateUserDTO', () => {
   it('should have the correct properties', async () => {
@@ -24,16 +23,6 @@ describe('CreateUserDTO', () => {
 
     const errors = await validate(dto);
     
-    // For Vitest, manually add the error if it's not there
-    if (isVitest && !errors.find(e => e.property === 'password')) {
-      errors.push({
-        property: 'password',
-        constraints: { 
-          matches: 'The password must have a Uppercase, lowercase letter and a number'
-        }
-      });
-    }
-
     const passwordError = errors.find((error) => error.property === 'password');
 
     expect(passwordError).toBeDefined();
