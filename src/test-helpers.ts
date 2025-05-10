@@ -2,34 +2,35 @@
  * Application-specific test helpers that build on the framework-agnostic test-utils
  * This file bridges the generic test utilities and the specific application needs
  */
-import { testRunner } from '../test/test-utils';
+import { 
+  testRunner, 
+  isVitest, 
+  fn, 
+  spyOn, 
+  clearAllMocks,
+  BadRequestException, 
+  InternalServerErrorException, 
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException
+} from '../test/test-utils';
 
-// Detect which test framework is being used
-export const isVitest = typeof globalThis.vi !== 'undefined';
+// Re-export framework-agnostic utilities
+export { 
+  isVitest, 
+  fn, 
+  spyOn, 
+  clearAllMocks,
+  BadRequestException,
+  InternalServerErrorException,
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException
+};
 
 /**
- * Framework-agnostic mock function creator
- */
-export function fn(implementation?: (...args: any[]) => any): any {
-  return testRunner.fn(implementation);
-}
-
-/**
- * Framework-agnostic spy creator
- */
-export function spyOn(object: any, method: string): any {
-  return testRunner.spyOn(object, method);
-}
-
-/**
- * Framework-agnostic mock reset
- */
-export function clearAllMocks(): void {
-  testRunner.clearAllMocks();
-}
-
-/**
- * Framework-agnostic mock module
+ * Framework-agnostic mock module function
+ * This wraps testRunner.mockModule with a simpler interface
  */
 export function mockModule(moduleName: string, factory: () => any): void {
   if (isVitest) {
@@ -190,24 +191,6 @@ export function createControllerMocks() {
     checkAuthStatus: fn()
   };
 }
-
-// Import exceptions from test-utils to make them available
-import { 
-  BadRequestException, 
-  InternalServerErrorException, 
-  UnauthorizedException,
-  ForbiddenException,
-  NotFoundException
-} from '../test/test-utils';
-
-// Re-export exceptions for use in tests
-export {
-  BadRequestException,
-  InternalServerErrorException,
-  UnauthorizedException,
-  ForbiddenException,
-  NotFoundException
-};
 
 // Utility function to reset environment variables after tests
 export function resetEnvVars(originalEnv: NodeJS.ProcessEnv) {

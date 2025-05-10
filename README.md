@@ -122,14 +122,28 @@ export const spyOn = testRunner.spyOn;
 export const clearAllMocks = testRunner.clearAllMocks;
 ```
 
-### 3. Generic Framework-specific Setup Files
+### 3. Global Mock Functions in Vitest Setup
 
-The setup files are now completely framework-agnostic and application-agnostic:
+To ensure that functions like `fn`, `clearAllMocks`, and `spyOn` work properly in Vitest, we add global functions directly in the vitest-setup.ts file:
 
-- `test/jest-setup.ts`: Only mocks core NestJS framework objects for Jest
-- `test/vitest-setup.ts`: Only mocks core NestJS framework objects for Vitest
+```typescript
+/**
+ * Vitest setup file - framework-agnostic configuration
+ */
+import { vi } from 'vitest';
+import { testRunner } from './test-utils';
 
-These files handle framework-specific setup without any application-specific code.
+// Make sure reflection metadata is loaded
+import 'reflect-metadata';
+
+// Create global functions that can be used directly
+// This ensures framework-agnostic test code works with both Jest and Vitest
+(global as any).fn = vi.fn;
+(global as any).clearAllMocks = vi.clearAllMocks;
+(global as any).spyOn = vi.spyOn; 
+
+// Rest of setup file...
+```
 
 ### 4. Application-specific Test Helpers
 
@@ -137,7 +151,30 @@ In this version, we've moved application-specific mocks to a separate file:
 
 ```typescript
 // src/test-helpers.ts
-import { isVitest, fn } from '../test/test-utils';
+import { 
+  isVitest, 
+  fn, 
+  spyOn, 
+  clearAllMocks,
+  BadRequestException,
+  InternalServerErrorException,
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException
+} from '../test/test-utils';
+
+// Re-export framework-agnostic utilities
+export { 
+  isVitest, 
+  fn, 
+  spyOn, 
+  clearAllMocks,
+  BadRequestException,
+  InternalServerErrorException,
+  UnauthorizedException,
+  ForbiddenException,
+  NotFoundException
+};
 
 // Application-specific mocks
 export function createServiceMocks() {
@@ -149,8 +186,6 @@ export function createServiceMocks() {
     remove: fn().mockResolvedValue({}),
   };
 }
-
-export { isVitest, fn, spyOn } from '../test/test-utils';
 ```
 
 ### 5. Direct Service Instantiation
@@ -228,9 +263,9 @@ Based on our latest testing with SWC for Vitest, here's the updated performance 
 
 | Metric | Jest | Vitest | Difference |
 |--------|------|--------|------------|
-| Total time | 25.82s | 6.73s | Vitest is 3.8x faster |
-| CPU usage | 1068% | 935% | Vitest uses 12.5% less CPU |
-| Memory (max) | 460MB | 175MB | Vitest uses 62% less memory |
+| Total time | 32.98s | 8.75s | Vitest is 3.7x faster |
+| CPU usage | 1079% | 918% | Vitest uses 15% less CPU |
+| Memory (max) | 460MB | 171MB | Vitest uses 63% less memory |
 | Page faults | 1520307 | 541655 | Vitest has 64% fewer page faults |
 
 ## Key Implementation Changes in This Version
@@ -243,7 +278,7 @@ This version builds on the previous foundation with several important improvemen
 4. **Direct Service Instantiation**: Moved away from TestingModule to simpler direct instantiation
 5. **Application-specific Test Helpers**: Centralized application mocks in src/test-helpers.ts
 6. **Decorator Testing Strategy**: New approach for testing decorators without complex mocking
-7. **Fixed Mock Properties**: Ensured Vitest mocks have expected methods like mockReturnValue
+7. **Simplified Global Setup**: Added global mock functions directly in vitest-setup.ts for cleaner organization
 
 ### Important Notes on Class-Validator and Decorators
 
@@ -251,7 +286,8 @@ One of the key challenges when working with NestJS and Vitest is handling class-
 
 1. Use SWC instead of esbuild (Vitest's default) for proper decorator metadata support
 2. Ensure 'reflect-metadata' is imported in the vitest setup file
-3. Keep tests simple and focused on behavior rather than implementation details
+3. Add global mock functions directly in vitest-setup.ts to support framework-agnostic code
+4. Keep tests simple and focused on behavior rather than implementation details
 
 With these changes, tests that use class-validator now work correctly in both Jest and Vitest environments without any special workarounds.
 

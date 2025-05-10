@@ -7,6 +7,12 @@ import { testRunner } from './test-utils';
 // Make sure reflection metadata is loaded
 import 'reflect-metadata';
 
+// Create global functions that can be used directly
+// This ensures framework-agnostic test code works with both Jest and Vitest
+(global as any).fn = vi.fn;
+(global as any).clearAllMocks = vi.clearAllMocks;
+(global as any).spyOn = vi.spyOn; 
+
 // Create UnauthorizedException class up front so it can be shared
 class UnauthorizedException extends Error {
   constructor(message) { 
