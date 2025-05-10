@@ -1,42 +1,27 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { JwtStrategy } from './jwt.strategy';
-import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '../interfaces';
 import { UnauthorizedException } from '@nestjs/common';
+import { fn, spyOn } from '../../test-helpers';
 
 describe('JwtStrategy.ts', () => {
   let strategy: JwtStrategy;
+  let userRepository: any;
+  let configService: any;
 
-  let userRepository: Repository<User>;
-
-  beforeEach(async () => {
-    const mockUserRepository = {
-      findOneBy: jest.fn(),
+  beforeEach(() => {
+    // Create repository mock
+    userRepository = {
+      findOneBy: fn()
     };
 
-    const mockConfigService = {
-      get: jest.fn().mockReturnValue('test-secret'),
+    // Create config service mock
+    configService = {
+      get: fn().mockReturnValue('test-secret')
     };
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        JwtStrategy,
-        {
-          provide: getRepositoryToken(User),
-          useValue: mockUserRepository,
-        },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
-      ],
-    }).compile();
-
-    strategy = module.get<JwtStrategy>(JwtStrategy);
-    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    // Directly instantiate the strategy with our mocks
+    strategy = new JwtStrategy(userRepository, configService);
   });
 
   it('should be defined', () => {
@@ -47,7 +32,7 @@ describe('JwtStrategy.ts', () => {
     const payload: JwtPayload = { id: '123' };
     const mockUser = { id: '123', isActive: true } as User;
 
-    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUser);
+    userRepository.findOneBy.mockResolvedValue(mockUser);
 
     const result = await strategy.validate(payload);
 
@@ -58,7 +43,7 @@ describe('JwtStrategy.ts', () => {
   it('should throw Unauthorized Exception if user does not exits', async () => {
     const payload: JwtPayload = { id: '123' };
 
-    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
+    userRepository.findOneBy.mockResolvedValue(null);
 
     await expect(strategy.validate(payload)).rejects.toThrow(
       UnauthorizedException,
@@ -70,7 +55,7 @@ describe('JwtStrategy.ts', () => {
     const payload: JwtPayload = { id: '123' };
     const mockUser = { id: '123', isActive: false } as User;
 
-    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUser);
+    userRepository.findOneBy.mockResolvedValue(mockUser);
 
     await expect(strategy.validate(payload)).rejects.toThrow(
       UnauthorizedException,

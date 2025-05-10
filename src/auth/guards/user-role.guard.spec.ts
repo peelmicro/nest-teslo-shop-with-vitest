@@ -5,6 +5,7 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
+import { testRunner } from '../../../test/test-utils';
 
 describe('UserRole Guard', () => {
   let guard: UserRoleGuard;
@@ -16,36 +17,36 @@ describe('UserRole Guard', () => {
     guard = new UserRoleGuard(reflector);
 
     mockContext = {
-      switchToHttp: jest.fn().mockReturnValue({
-        getRequest: jest.fn(),
+      switchToHttp: testRunner.fn().mockReturnValue({
+        getRequest: testRunner.fn(),
       }),
-      getHandler: jest.fn(),
+      getHandler: testRunner.fn(),
     } as unknown as ExecutionContext;
   });
 
   it('should return true if no roles are present', () => {
-    jest.spyOn(reflector, 'get').mockReturnValue(undefined);
+    testRunner.spyOn(reflector, 'get').mockReturnValue(undefined);
 
     expect(guard.canActivate(mockContext)).toBe(true);
   });
 
   it('should return true if no roles are required', () => {
-    jest.spyOn(reflector, 'get').mockReturnValue([]);
+    testRunner.spyOn(reflector, 'get').mockReturnValue([]);
 
     expect(guard.canActivate(mockContext)).toBe(true);
   });
 
   it('should throw BadRequestException if user is not found', () => {
-    jest.spyOn(reflector, 'get').mockReturnValue(['admin']);
-    jest.spyOn(mockContext.switchToHttp(), 'getRequest').mockReturnValue({});
+    testRunner.spyOn(reflector, 'get').mockReturnValue(['admin']);
+    testRunner.spyOn(mockContext.switchToHttp(), 'getRequest').mockReturnValue({});
 
     expect(() => guard.canActivate(mockContext)).toThrow(BadRequestException);
     expect(() => guard.canActivate(mockContext)).toThrow('User not found');
   });
 
   it('should return true if user has a valid role', () => {
-    jest.spyOn(reflector, 'get').mockReturnValue(['admin']);
-    jest.spyOn(mockContext.switchToHttp(), 'getRequest').mockReturnValue({
+    testRunner.spyOn(reflector, 'get').mockReturnValue(['admin']);
+    testRunner.spyOn(mockContext.switchToHttp(), 'getRequest').mockReturnValue({
       user: {
         roles: ['admin'],
         fullName: 'Fernando',
@@ -63,8 +64,8 @@ describe('UserRole Guard', () => {
 
     const validRoles = ['admin'];
 
-    jest.spyOn(reflector, 'get').mockReturnValue(validRoles);
-    jest.spyOn(mockContext.switchToHttp(), 'getRequest').mockReturnValue({
+    testRunner.spyOn(reflector, 'get').mockReturnValue(validRoles);
+    testRunner.spyOn(mockContext.switchToHttp(), 'getRequest').mockReturnValue({
       user: user,
     });
 

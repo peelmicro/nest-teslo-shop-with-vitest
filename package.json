@@ -23,7 +23,11 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./jest-e2e.json",
     "test:e2e:watch": "jest --config ./jest-e2e.json --watch --detectOpenHandles ",
-    "test:e2e:cov": "jest --config ./jest-e2e.json --coverage"
+    "test:e2e:cov": "jest --config ./jest-e2e.json --coverage",
+    "test:vitest": "vitest run",
+    "test:vitest:watch": "vitest",
+    "test:compare": "echo 'Running Jest tests...' && time npm run test && echo 'Running Vitest tests...' && time npm run test:vitest"
+
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
@@ -73,7 +77,9 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "4.2.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "unplugin-swc": "^1.5.2",
+    "vitest": "^3.1.3"
   },
   "jest": {
     "moduleFileExtensions": [

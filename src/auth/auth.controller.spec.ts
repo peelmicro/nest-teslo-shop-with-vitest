@@ -1,34 +1,51 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
-import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { CreateUserDto, LoginUserDto } from './dto';
 import { User } from './entities/user.entity';
+import { fn, spyOn } from '../test-helpers';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 
 describe('AuthController', () => {
   let authController: AuthController;
-  let authService: AuthService;
+  let authService: any;
 
-  beforeEach(async () => {
-    const mockAuthService = {
-      create: jest.fn(),
-      login: jest.fn(),
-      checkAuthStatus: jest.fn(),
+  beforeEach(() => {
+    // Create custom mocks for this specific test
+    authService = {
+      create: fn().mockImplementation((dto) => {
+        return {
+          user: {
+            id: 'test-id',
+            email: dto.email,
+            fullName: dto.fullName,
+            isActive: true,
+            roles: ['user']
+          },
+          token: 'test-token'
+        };
+      }),
+      login: fn().mockImplementation((dto) => {
+        return {
+          user: {
+            id: 'test-id',
+            email: dto.email,
+            fullName: 'Test User',
+            isActive: true,
+            roles: ['user']
+          },
+          token: 'test-token'
+        };
+      }),
+      checkAuthStatus: fn().mockImplementation((user) => {
+        return {
+          user,
+          token: 'test-token'
+        };
+      })
     };
 
-    const module: TestingModule = await Test.createTestingModule({
-      imports: [PassportModule.register({ defaultStrategy: 'jwt' })],
-      providers: [
-        {
-          provide: AuthService,
-          useValue: mockAuthService,
-        },
-      ],
-      controllers: [AuthController],
-    }).compile();
-
-    authController = module.get<AuthController>(AuthController);
-    authService = module.get<AuthService>(AuthService);
+    // Manually instantiate the controller with our mocks
+    authController = new AuthController(authService);
   });
 
   it('should be defined', () => {
@@ -36,51 +53,77 @@ describe('AuthController', () => {
   });
 
   it('should create user with the proper DTO', async () => {
-    const dto: CreateUserDto = {
+    const dto = {
       email: 'test@google.com',
       password: 'Abc123',
       fullName: 'Test User',
     };
 
-    await authController.createUser(dto);
+    const result = await authController.createUser(dto);
 
-    expect(authService.create).toHaveBeenCalled();
     expect(authService.create).toHaveBeenCalledWith(dto);
+    expect(result).toEqual({
+      user: {
+        id: 'test-id',
+        email: dto.email,
+        fullName: dto.fullName,
+        isActive: true,
+        roles: ['user']
+      },
+      token: 'test-token'
+    });
   });
 
   it('should loginUser with the proper DTO', async () => {
-    const dto: LoginUserDto = {
+    const dto = {
       email: 'test@google.com',
       password: 'Abc123',
     };
 
-    await authController.loginUser(dto);
+    const result = await authController.loginUser(dto);
 
-    expect(authService.login).toHaveBeenCalled();
     expect(authService.login).toHaveBeenCalledWith(dto);
+    expect(result).toEqual({
+      user: {
+        id: 'test-id',
+        email: dto.email,
+        fullName: 'Test User',
+        isActive: true,
+        roles: ['user']
+      },
+      token: 'test-token'
+    });
   });
 
   it('should check-user status with the proper DTO', async () => {
     const user = {
+      id: 'test-id',
       email: 'test@google.com',
-      password: 'Abc123',
-      fullName: 'Test Name',
+      fullName: 'Test User',
+      isActive: true,
+      roles: ['user']
     } as User;
 
-    await authController.checkAuthStatus(user);
+    const result = await authController.checkAuthStatus(user);
 
-    expect(authService.checkAuthStatus).toHaveBeenCalled();
     expect(authService.checkAuthStatus).toHaveBeenCalledWith(user);
+    expect(result).toEqual({
+      user,
+      token: 'test-token'
+    });
   });
 
   it('should return private route data', () => {
     const user = {
-      id: '1',
+      id: 'test-id',
       email: 'test@google.com',
       fullName: 'Test User',
     } as User;
 
-    const request = {} as Express.Request;
+    const request = {
+      headers: { header1: 'value1', header2: 'value2' }
+    } as any;
+
     const rawHeaders = ['header1: value1', 'header2: value2'];
     const headers = { header1: 'value1', header2: 'value2' };
 
@@ -89,16 +132,109 @@ describe('AuthController', () => {
       user,
       user.email,
       rawHeaders,
-      headers,
+      headers
     );
 
     expect(result).toEqual({
       ok: true,
       message: 'Hola Mundo Private',
-      user: { id: '1', email: 'test@google.com', fullName: 'Test User' },
-      userEmail: 'test@google.com',
-      rawHeaders: ['header1: value1', 'header2: value2'],
-      headers: { header1: 'value1', header2: 'value2' },
+      user,
+      userEmail: user.email,
+      rawHeaders,
+      headers
+    });
+  });
+
+  it('should handle create user service errors', async () => {
+    const dto = {
+      email: 'test@google.com',
+      password: 'Abc123',
+      fullName: 'Test User',
+    };
+
+    authService.create = fn().mockRejectedValue(new BadRequestException('Email already exists'));
+
+    await expect(authController.createUser(dto)).rejects.toThrow(BadRequestException);
+    await expect(authController.createUser(dto)).rejects.toThrow('Email already exists');
+  });
+
+  it('should handle login service errors', async () => {
+    const dto = {
+      email: 'test@google.com',
+      password: 'Abc123',
+    };
+
+    authService.login = fn().mockRejectedValue(new UnauthorizedException('Credentials are not valid'));
+
+    await expect(authController.loginUser(dto)).rejects.toThrow(UnauthorizedException);
+    await expect(authController.loginUser(dto)).rejects.toThrow('Credentials are not valid');
+  });
+
+  it('should handle check auth status service errors', async () => {
+    const user = {
+      id: 'test-id',
+      email: 'test@google.com',
+      fullName: 'Test User',
+    } as User;
+
+    authService.checkAuthStatus = fn().mockRejectedValue(new UnauthorizedException('Token not valid'));
+
+    await expect(authController.checkAuthStatus(user)).rejects.toThrow(UnauthorizedException);
+    await expect(authController.checkAuthStatus(user)).rejects.toThrow('Token not valid');
+  });
+
+  it('should handle missing user in private route', () => {
+    const request = {
+      headers: { header1: 'value1' }
+    } as any;
+
+    const rawHeaders = ['header1: value1'];
+    const headers = { header1: 'value1' };
+
+    const result = authController.testingPrivateRoute(
+      request,
+      null,
+      null,
+      rawHeaders,
+      headers
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      message: 'Hola Mundo Private',
+      user: null,
+      userEmail: null,
+      rawHeaders,
+      headers
+    });
+  });
+
+  it('should handle empty headers in private route', () => {
+    const user = {
+      id: 'test-id',
+      email: 'test@google.com',
+      fullName: 'Test User',
+    } as User;
+
+    const request = {} as any;
+    const rawHeaders: string[] = [];
+    const headers = {};
+
+    const result = authController.testingPrivateRoute(
+      request,
+      user,
+      user.email,
+      rawHeaders,
+      headers
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      message: 'Hola Mundo Private',
+      user,
+      userEmail: user.email,
+      rawHeaders,
+      headers
     });
   });
 });

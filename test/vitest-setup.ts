@@ -60,6 +60,9 @@ const mocks = {
       },
       ForbiddenException: class ForbiddenException extends Error {
         constructor(message) { super(message); this.name = 'ForbiddenException'; }
+      },
+      NotFoundException: class NotFoundException extends Error {
+        constructor(message) { super(message); this.name = 'NotFoundException'; }
       }
     },
     executionContext: {
@@ -112,163 +115,88 @@ Object.defineProperty(global, 'bcrypt', {
   configurable: true
 });
 
-// Create mock app that can be used across tests
-const mockApp = {
+// Create mock app with all necessary methods
+const createMockApp = () => ({
   useGlobalPipes: vi.fn(),
   setGlobalPrefix: vi.fn(),
   listen: vi.fn().mockResolvedValue(undefined),
+  // Add other common app methods as needed
   enableCors: vi.fn(),
   useGlobalFilters: vi.fn(),
   useGlobalInterceptors: vi.fn(),
   useGlobalGuards: vi.fn(),
   getHttpServer: vi.fn().mockReturnValue({}),
-  getHttpAdapter: vi.fn().mockReturnValue({
-    getInstance: vi.fn().mockReturnValue({}),
-    getType: vi.fn().mockReturnValue('express')
-  })
-};
+});
 
-// Set up framework-agnostic NestJS mocks
+// Create a shared mockApp that will be consistent across all tests
+const mockApp = createMockApp();
+
+// Mock NestJS core to prevent actual app startup
 vi.mock('@nestjs/core', async () => {
   const originalModule = await vi.importActual('@nestjs/core');
   return {
-    ...(originalModule || {}),
+    ...(originalModule as object),
     NestFactory: {
-      ...(originalModule && originalModule.NestFactory ? originalModule.NestFactory : {}),
-      create: vi.fn().mockResolvedValue(mockApp)
+      // Handle NestFactory safely
+      ...(originalModule && typeof originalModule === 'object' && 
+          'NestFactory' in originalModule && 
+          typeof originalModule.NestFactory === 'object' ? 
+          originalModule.NestFactory : {}),
+      create: vi.fn().mockResolvedValue(mockApp),
     },
-    Reflector: vi.fn().mockImplementation(() => ({
-      get: vi.fn().mockReturnValue([]),
-      getAllAndOverride: vi.fn().mockReturnValue([])
-    }))
   };
 });
 
-// Generic decorator mock factory - application-agnostic
-const mockDecorator = (name) => vi.fn().mockImplementation(() => {
-  return function(target) {
-    return target;
-  };
-});
-
-// Expose UnauthorizedException globally for PassportStrategy
-globalThis.UnauthorizedException = UnauthorizedException;
-
-// Mock NestJS common decorators and classes
+// Mock ValidationPipe
 vi.mock('@nestjs/common', async () => {
-  const originalModule = await vi.importActual('@nestjs/common') || {};
-  
-  // Create a properly typed object with all our mocks
-  const commonMock = {
-    // Add all decorators and methods we need
-    Injectable: mockDecorator('Injectable'),
-    Module: mockDecorator('Module'),
-    Controller: mocks.nestjs.http.Controller,
-    Get: mocks.nestjs.http.Get,
-    Post: mocks.nestjs.http.Post,
-    Put: mocks.nestjs.http.Put,
-    Delete: mocks.nestjs.http.Delete,
-    Patch: mocks.nestjs.http.Patch,
-    Body: mockDecorator('Body'),
-    Param: mockDecorator('Param'),
-    Query: mockDecorator('Query'),
-    Req: mockDecorator('Req'),
-    Res: mockDecorator('Res'),
-    UploadedFile: mockDecorator('UploadedFile'),
-    ParseFilePipe: vi.fn().mockImplementation(() => mockDecorator('ParseFilePipe')),
-    FileTypeValidator: vi.fn().mockImplementation(() => ({ validate: vi.fn().mockReturnValue(true) })),
-    MaxFileSizeValidator: vi.fn().mockImplementation(() => ({ validate: vi.fn().mockReturnValue(true) })),
-    SetMetadata: mocks.nestjs.decorators.SetMetadata,
-    createParamDecorator: mocks.nestjs.decorators.createParamDecorator,
-    applyDecorators: vi.fn().mockImplementation((...decorators) => {
-      // Return a function, not an object
-      return function decorator(target) {
-        return target;
-      };
-    }),
-    UseGuards: mocks.nestjs.decorators.UseGuards,
-    UseInterceptors: mockDecorator('UseInterceptors'),
-    UsePipes: mockDecorator('UsePipes'),
-    UnauthorizedException,
-    BadRequestException: mocks.nestjs.exceptions.BadRequestException, 
-    InternalServerErrorException: mocks.nestjs.exceptions.InternalServerErrorException,
-    ForbiddenException: mocks.nestjs.exceptions.ForbiddenException,
-    NotFoundException: class NotFoundException extends Error {
-      constructor(message) { super(message); this.name = 'NotFoundException'; }
-    },
-    ExecutionContext: vi.fn().mockImplementation(() => mocks.nestjs.executionContext),
-    ValidationPipe: vi.fn().mockImplementation(() => ({
-      transform: vi.fn().mockReturnValue(true)
-    })),
-    Logger: vi.fn().mockImplementation(() => ({
-      log: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn(),
-      debug: vi.fn(),
-      verbose: vi.fn()
-    }))
-  };
-  
-  return commonMock;
-});
-
-// Mock passport module - commonly used for auth
-vi.mock('@nestjs/passport', async () => {
+  const originalModule = await vi.importActual('@nestjs/common');
   return {
-    PassportModule: {
-      register: vi.fn().mockImplementation(() => ({
-        module: 'PassportModule',
-        providers: [],
-        exports: []
-      }))
-    },
-    AuthGuard: vi.fn().mockImplementation(() => {
-      return class MockAuthGuard {
-        canActivate() {
-          return true;
-        }
-      };
-    }),
-    PassportStrategy: vi.fn().mockImplementation((Strategy) => {
-      return class MockPassportStrategy {
-        validate: any;
-        userRepository: any;
-        
-        constructor() {
-          // Create a more realistic validate method that mimics JWT behavior
-          this.validate = vi.fn().mockImplementation(async (payload) => {
-            // This is application-agnostic because we're using the repository pattern
-            // that's common in NestJS
-            
-            // Access the repository through the object's property
-            // In tests, this will be mocked/spied on as needed
-            if (this.userRepository) {
-              const mockUser = await this.userRepository.findOneBy({ id: payload?.id });
-              
-              // Standard JWT validation logic - if user not found or not active, throw error
-              if (!mockUser) {
-                throw new UnauthorizedException('Token not valid');
-              }
-              
-              if (!mockUser.isActive) {
-                throw new UnauthorizedException('User is inactive, talk with an admin');
-              }
-              
-              return mockUser;
-            }
-            
-            // Default behavior if no repo available
-            return { id: payload?.id || 'test-user-id' };
-          });
-        }
-      };
-    })
+    ...(originalModule as object),
+    ValidationPipe: vi.fn().mockImplementation(() => ({
+      transform: vi.fn().mockReturnValue(true),
+    })),
   };
 });
 
-// Mock swagger - common in NestJS apps
-vi.mock('@nestjs/swagger', async () => {
-  return mocks.swagger;
+// Mock for supertest - using a simpler, more direct approach
+// This handles CommonJS-style imports (import * as request from 'supertest')
+const createSupertestMock = () => {
+  // The chainable request methods
+  const chainMethods = {
+    get: vi.fn().mockReturnThis(),
+    post: vi.fn().mockReturnThis(),
+    put: vi.fn().mockReturnThis(),
+    patch: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    send: vi.fn().mockReturnThis(),
+    query: vi.fn().mockReturnThis(),
+    expect: vi.fn().mockImplementation((status) => {
+      return {
+        expect: vi.fn().mockReturnThis(),
+        end: vi.fn().mockImplementation((cb) => cb && cb(null, { 
+          status,
+          statusCode: status,
+          body: {},
+          text: 'Mock response'
+        })),
+      };
+    }),
+  };
+  
+  // The main supertest function
+  const supertestFn = vi.fn().mockReturnValue(chainMethods);
+  
+  // For CommonJS require('supertest')
+  return {
+    default: supertestFn,
+    // For CommonJS 'import * as request'
+    __esModule: true
+  };
+};
+
+vi.mock('supertest', async () => {
+  return createSupertestMock();
 });
 
 // Store original env
@@ -309,21 +237,51 @@ vi.mock('class-validator', async () => {
     ...(originalModule || {}),
     validate: genericValidate,
     // Common decorators used across NestJS
-    IsString: mockDecorator('IsString'),
-    IsEmail: mockDecorator('IsEmail'),
-    IsOptional: mockDecorator('IsOptional'),
-    IsPositive: mockDecorator('IsPositive'),
-    IsInt: mockDecorator('IsInt'),
-    Min: mockDecorator('Min'),
-    Max: mockDecorator('Max'),
-    IsIn: mockDecorator('IsIn'),
-    Matches: mockDecorator('Matches'),
-    MinLength: mockDecorator('MinLength'),
-    MaxLength: mockDecorator('MaxLength'),
-    IsUUID: mockDecorator('IsUUID'),
-    IsBoolean: mockDecorator('IsBoolean'),
-    IsDate: mockDecorator('IsDate'),
-    IsArray: mockDecorator('IsArray')
+    IsString: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsEmail: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsOptional: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsPositive: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsInt: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    Min: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    Max: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsIn: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    Matches: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    MinLength: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    MaxLength: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsUUID: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsBoolean: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsDate: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    }),
+    IsArray: vi.fn().mockImplementation((target, propertyKey, descriptor) => {
+      return typeof target === 'function' ? target : descriptor;
+    })
   };
 });
 
@@ -339,48 +297,16 @@ vi.mock('@nestjs/platform-express', async () => {
 // Mock bcrypt directly
 vi.mock('bcrypt', () => mocks.auth);
 
-// Create simple supertest mock
-const createSupertestMock = () => {
-  // The chainable request methods
-  const chainMethods = {
-    get: vi.fn().mockReturnThis(),
-    post: vi.fn().mockReturnThis(),
-    put: vi.fn().mockReturnThis(),
-    patch: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    set: vi.fn().mockReturnThis(),
-    send: vi.fn().mockReturnThis(),
-    query: vi.fn().mockReturnThis(),
-    expect: vi.fn().mockImplementation((status) => {
-      return {
-        expect: vi.fn().mockReturnThis(),
-        end: vi.fn().mockImplementation((cb) => cb && cb(null, { 
-          status,
-          statusCode: status,
-          body: {},
-          text: 'Mock response'
-        })),
-      };
-    }),
-  };
-  
-  // The main supertest function
-  const supertestFn = vi.fn().mockReturnValue(chainMethods);
-  
-  return {
-    default: supertestFn,
-    __esModule: true
-  };
-};
-
-vi.mock('supertest', async () => createSupertestMock());
-
 // Mock testing module
 vi.mock('@nestjs/testing', async () => {
-  // Create a map of providers
+  // Create a map of providers and controllers
   const providers = new Map();
+  const controllers = new Map();
   
-  // Create a module ref that can store and retrieve providers
+  // Use the application-specific service mocks from src/test-helpers.ts
+  const { createServiceMocks, createControllerMocks, createRepositoryMocks } = await import('../src/test-helpers');
+  
+  // Create the module ref that will be returned by compile()
   const mockModuleRef = {
     get: vi.fn().mockImplementation((token) => {
       const key = typeof token === 'function' ? token.name : token;
@@ -390,20 +316,37 @@ vi.mock('@nestjs/testing', async () => {
         return providers.get(key);
       }
       
-      // If not, create a new mock instance
-      const instance = {
-        // Common service methods
-        create: vi.fn(),
-        findOne: vi.fn(),
-        findAll: vi.fn(),
-        update: vi.fn(),
-        remove: vi.fn(),
-        // Auth-specific methods
-        login: vi.fn(),
-        checkAuthStatus: vi.fn(),
-        // File-specific methods
-        getStaticProductImage: vi.fn()
-      };
+      // If we have the controller in the map, return it
+      if (controllers.has(key)) {
+        return controllers.get(key);
+      }
+      
+      // Create appropriate mock based on name convention
+      if (key.includes('Service')) {
+        const serviceMock = createServiceMocks();
+        providers.set(key, serviceMock);
+        return serviceMock;
+      } else if (key.includes('Controller')) {
+        // Create controller methods based on common patterns
+        const controllerMock = createControllerMocks();
+        controllers.set(key, controllerMock);
+        return controllerMock;
+      } else if (key.includes('Repository')) {
+        const repositoryMock = createRepositoryMocks();
+        providers.set(key, repositoryMock);
+        return repositoryMock;
+      } else if (key.includes('Strategy')) {
+        const strategyMock = {
+          validate: vi.fn().mockImplementation(async (payload) => {
+            return { id: payload.id, email: 'test@example.com' };
+          })
+        };
+        providers.set(key, strategyMock);
+        return strategyMock;
+      }
+      
+      // Generic mock for anything else
+      const instance = createServiceMocks();
       
       // Store the instance for future retrievals
       providers.set(key, instance);
@@ -411,7 +354,8 @@ vi.mock('@nestjs/testing', async () => {
     }),
     resolve: vi.fn(),
     select: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    createNestApplication: vi.fn().mockImplementation(() => mockApp)
   };
   
   // Create the Test object with the createTestingModule function
@@ -429,18 +373,9 @@ vi.mock('@nestjs/testing', async () => {
                 : '');
             
             if (token) {
-              // Create a mock instance for each provider
-              providers.set(token, {
-                // Common methods for different types of providers
-                create: vi.fn(),
-                findOne: vi.fn(),
-                findAll: vi.fn(),
-                update: vi.fn(),
-                remove: vi.fn(),
-                login: vi.fn(),
-                checkAuthStatus: vi.fn(),
-                getStaticProductImage: vi.fn()
-              });
+              // Set a value in the map for later retrieval,
+              // we'll create the mock when it's requested
+              providers.set(token, null);
             }
           });
         }
@@ -450,7 +385,9 @@ vi.mock('@nestjs/testing', async () => {
           metadata.controllers.forEach(controller => {
             const token = typeof controller === 'function' ? controller.name : '';
             if (token) {
-              providers.set(token, {});
+              // Set a value in the map for later retrieval,
+              // we'll create the mock when it's requested
+              controllers.set(token, null);
             }
           });
         }

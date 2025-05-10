@@ -1,16 +1,22 @@
-import { ExecutionContext, InternalServerErrorException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
 import { getUser } from './get-user.decorator';
+import { testRunner, isVitest, InternalServerErrorException } from '../../../test/test-utils';
 
-jest.mock('@nestjs/common', () => ({
-  createParamDecorator: jest.fn(),
-  InternalServerErrorException:
-    jest.requireActual('@nestjs/common').InternalServerErrorException,
-}));
+// Use our agnostic approach to mocking
+testRunner.mockModuleWithImports({
+  moduleName: '@nestjs/common',
+  factory: (originalModule) => ({
+    ...(originalModule || {}),
+    createParamDecorator: testRunner.fn(),
+    // Use our exported exception instead of trying to import it
+    InternalServerErrorException: InternalServerErrorException
+  })
+});
 
 describe('GetUser Decorator', () => {
   const mockExecutionContext = {
-    switchToHttp: jest.fn().mockReturnValue({
-      getRequest: jest.fn().mockReturnValue({
+    switchToHttp: testRunner.fn().mockReturnValue({
+      getRequest: testRunner.fn().mockReturnValue({
         user: {
           id: '1',
           name: 'John Doe',
@@ -32,8 +38,8 @@ describe('GetUser Decorator', () => {
 
   it('should throw an internal server error if user not found', () => {
     const mockExecutionContext = {
-      switchToHttp: jest.fn().mockReturnValue({
-        getRequest: jest.fn().mockReturnValue({
+      switchToHttp: testRunner.fn().mockReturnValue({
+        getRequest: testRunner.fn().mockReturnValue({
           user: null,
         }),
       }),
@@ -41,9 +47,11 @@ describe('GetUser Decorator', () => {
 
     try {
       getUser(null, mockExecutionContext);
+      // This line should not be reached if the getUser properly throws an error
       expect(true).toBe(false);
     } catch (error) {
-      expect(error).toBeInstanceOf(InternalServerErrorException);
+      // Compare by name rather than by instanceof for better test stability
+      expect(error.name).toBe('InternalServerErrorException');
       expect(error.message).toBe('User not found (request)');
     }
   });

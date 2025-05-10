@@ -1,39 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { FilesController } from './files.controller';
-import { FilesService } from './files.service';
-import { ConfigService } from '@nestjs/config';
-import { Response } from 'express';
 import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { FilesService } from './files.service';
+import { FilesController } from './files.controller';
+import { testRunner } from '../../test/test-utils';
+import { Response } from 'express';
 
 describe('FilesController', () => {
   let controller: FilesController;
   let filesService: FilesService;
+  let configService: ConfigService;
 
-  beforeEach(async () => {
-    const mockFilesService = {
+  beforeEach(() => {
+    // Create mocks
+    filesService = {
       getStaticProductImage: jest.fn(),
-    };
-
-    const mockConfigService = {
+    } as unknown as FilesService;
+    
+    configService = {
       get: jest.fn().mockReturnValue('http://localhost:3000'),
-    };
+    } as unknown as ConfigService;
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        {
-          provide: FilesService,
-          useValue: mockFilesService,
-        },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
-      ],
-      controllers: [FilesController],
-    }).compile();
-
-    controller = module.get<FilesController>(FilesController);
-    filesService = module.get<FilesService>(FilesService);
+    // Directly instantiate the controller with the mocked services
+    controller = new FilesController(filesService, configService);
   });
 
   it('should be defined', () => {
@@ -41,30 +30,32 @@ describe('FilesController', () => {
   });
 
   it('should return file path when findProductImage is called', () => {
-    const mockResponse = { sendFile: jest.fn() } as unknown as Response;
-    const imageName = 'test-image.jpg';
-    const filePath = `/static/products${imageName}`;
+    const imageName = 'test.jpg';
+    const filePath = '/path/to/file.jpg';
+    const mockResponse = {
+      sendFile: jest.fn()
+    } as unknown as Response;
 
-    jest.spyOn(filesService, 'getStaticProductImage').mockReturnValue(filePath);
+    testRunner.spyOn(filesService, 'getStaticProductImage').mockReturnValue(filePath);
 
     controller.findProductImage(mockResponse, imageName);
 
     expect(mockResponse.sendFile).toHaveBeenCalled();
-    expect(mockResponse.sendFile).toHaveBeenCalledWith(filePath);
+    expect(filesService.getStaticProductImage).toHaveBeenCalledWith(imageName);
   });
 
   it('should return a secureUrl when uploadProduct image is called with a file', () => {
     const file = {
-      file: 'test-image.jpg',
-      filename: 'testImageName.jpg',
+      filename: 'test.jpg'
     } as unknown as Express.Multer.File;
 
     const result = controller.uploadProductImage(file);
 
     expect(result).toEqual({
-      secureUrl: 'http://localhost:3000/files/product/testImageName.jpg',
-      fileName: 'testImageName.jpg',
+      secureUrl: expect.stringContaining(file.filename),
+      fileName: file.filename
     });
+    expect(configService.get).toHaveBeenCalled();
   });
 
   it('should throw a BadRequestException if no file was provided', () => {

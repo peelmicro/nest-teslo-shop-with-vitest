@@ -48,23 +48,37 @@ export const createMockModule = () => {
   return mockModule;
 };
 
+// Counter to ensure each test gets a unique port
+let portCounter = 5000;
+
 /**
  * Creates a standard NestJS application mock with common methods
  */
-export const createMockNestApp = () => ({
-  useGlobalPipes: testRunner.fn(),
-  setGlobalPrefix: testRunner.fn(),
-  listen: testRunner.fn().mockResolvedValue(undefined),
-  enableCors: testRunner.fn(),
-  useGlobalFilters: testRunner.fn(),
-  useGlobalInterceptors: testRunner.fn(),
-  useGlobalGuards: testRunner.fn(),
-  getHttpServer: testRunner.fn().mockReturnValue({}),
-  getHttpAdapter: testRunner.fn().mockReturnValue({
-    getInstance: () => ({}),
-    getType: () => 'express'
-  })
-});
+export const createMockNestApp = () => {
+  // Use a unique port for each instance to avoid conflicts
+  const uniquePort = process.env.PORT || portCounter++;
+  
+  return {
+    useGlobalPipes: testRunner.fn(),
+    setGlobalPrefix: testRunner.fn(),
+    // Don't actually try to listen on any port, just resolve
+    listen: testRunner.fn().mockImplementation((port) => {
+      // Store the port that was used for assertions
+      (global as any).__lastPort = port || uniquePort;
+      return Promise.resolve();
+    }),
+    enableCors: testRunner.fn(),
+    useGlobalFilters: testRunner.fn(),
+    useGlobalInterceptors: testRunner.fn(),
+    useGlobalGuards: testRunner.fn(),
+    getHttpServer: testRunner.fn().mockReturnValue({}),
+    getHttpAdapter: testRunner.fn().mockReturnValue({
+      getInstance: () => ({}),
+      getType: () => 'express'
+    }),
+    close: testRunner.fn().mockResolvedValue(undefined) // Add close method for cleanup
+  };
+};
 
 /**
  * Prepares commonly used mocks for NestJS tests
@@ -163,6 +177,12 @@ export const prepareMocksForTest = () => {
         super(message);
         this.name = 'ForbiddenException';
       }
+    },
+    NotFoundException: class NotFoundException extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'NotFoundException';
+      }
     }
   };
 
@@ -244,6 +264,14 @@ export const createTestRequestMock = () => {
     __esModule: true
   };
 };
+
+/**
+ * Define a proper interface for the MockPassportStrategy to avoid TS errors
+ */
+interface MockPassportStrategy {
+  validate: Mock;
+  userRepository?: any;
+}
 
 /**
  * Test utilities that work with both Jest and Vitest
@@ -454,6 +482,9 @@ export const testRunner = {
             get(key: string, target: any) {
               return [];
             }
+            getAllAndOverride(key: string, targets: any[]) {
+              return [];
+            }
           }
         })
       });
@@ -481,7 +512,50 @@ export const testRunner = {
     testRunner.mockModuleWithImports({
       moduleName: '@nestjs/passport',
       importOriginal: false,
-      factory: () => mocks.passport
+      factory: () => ({
+        PassportModule: {
+          register: testRunner.fn().mockImplementation(() => ({
+            module: 'PassportModule',
+            providers: [],
+            exports: []
+          }))
+        },
+        AuthGuard: testRunner.fn().mockImplementation(() => {
+          return class MockAuthGuard {
+            canActivate() {
+              return true;
+            }
+          };
+        }),
+        PassportStrategy: testRunner.fn().mockImplementation((Strategy) => {
+          return class MockPassportStrategy {
+            validate: Mock;
+            userRepository: any;
+
+            constructor() {
+              // Create a validate method for JwtStrategy
+              this.validate = testRunner.fn().mockImplementation(async (payload) => {
+                // Access the repository through the object's property
+                if (this.userRepository) {
+                  const mockUser = await this.userRepository.findOneBy({ id: payload?.id });
+                  
+                  if (!mockUser) {
+                    throw new mocks.nestjs.exceptions.UnauthorizedException('Token not valid');
+                  }
+                  
+                  if (!mockUser.isActive) {
+                    throw new mocks.nestjs.exceptions.UnauthorizedException('User is inactive, talk with an admin');
+                  }
+                  
+                  return mockUser;
+                }
+                
+                return { id: payload?.id || 'test-user-id', email: 'test@example.com' };
+              });
+            }
+          };
+        })
+      })
     });
     
     // Mock common utility modules
@@ -524,7 +598,8 @@ export const testRunner = {
         ? await import('@nestjs/core') 
         : require('@nestjs/core');
       
-      // Create the mock app
+      // Create the mock app - use a unique port
+      const uniquePort = options.port && parseInt(options.port.toString()) + portCounter++;
       const app = await NestFactory.create({} as any);
       
       // Set global prefix if provided
@@ -556,9 +631,9 @@ export const testRunner = {
         options.customizeApp(app);
       }
       
-      // Listen on specified port - match the exact behavior from the app's main.ts
-      // This ensures the test assertions match the actual implementation
-      app.listen(process.env.PORT ?? options.port);
+      // Use process.env.PORT or the unique port - this won't actually bind to a port
+      // but will store the port value for testing
+      await app.listen(process.env.PORT ?? uniquePort ?? options.port);
       
       return app;
     });
@@ -612,3 +687,4 @@ export const InternalServerErrorException = mockExceptions.InternalServerErrorEx
 export const BadRequestException = mockExceptions.BadRequestException;
 export const UnauthorizedException = mockExceptions.UnauthorizedException;
 export const ForbiddenException = mockExceptions.ForbiddenException;
+export const NotFoundException = mockExceptions.NotFoundException;

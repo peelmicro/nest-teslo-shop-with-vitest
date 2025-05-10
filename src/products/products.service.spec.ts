@@ -1,48 +1,51 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ProductsService } from './products.service';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { Product, ProductImage } from './entities';
-import { DataSource, QueryResult, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { CreateProductDto } from './dto/create-product.dto';
 import { User } from '../auth/entities/user.entity';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { testRunner } from '../../test/test-utils';
+import type { Mock } from '../../test/test-utils';
 
 describe('ProductService', () => {
   let service: ProductsService;
-  let productRepository: Repository<Product>;
-  let productImageRepository: Repository<ProductImage>;
+  let productRepository: any;
+  let productImageRepository: any;
+  let dataSource: any;
 
   let mockQueryRunner: {
-    connect: jest.Mock;
-    startTransaction: jest.Mock;
+    connect: Mock;
+    startTransaction: Mock;
     manager: {
-      delete: jest.Mock;
-      save: jest.Mock;
+      delete: Mock;
+      save: Mock;
     };
-    commitTransaction: jest.Mock;
-    release: jest.Mock;
-    rollbackTransaction: jest.Mock;
+    commitTransaction: Mock;
+    release: Mock;
+    rollbackTransaction: Mock;
   };
 
   beforeEach(async () => {
+    // Create mock query runner
     mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
+      connect: testRunner.fn(),
+      startTransaction: testRunner.fn(),
       manager: {
-        delete: jest.fn(),
-        save: jest.fn(),
+        delete: testRunner.fn(),
+        save: testRunner.fn(),
       },
-      commitTransaction: jest.fn(),
-      release: jest.fn(),
-      rollbackTransaction: jest.fn(),
+      commitTransaction: testRunner.fn(),
+      release: testRunner.fn(),
+      rollbackTransaction: testRunner.fn(),
     };
 
+    // Create mock query builder
     const mockQueryBuilder = {
-      where: jest.fn(() => mockQueryBuilder),
-      leftJoinAndSelect: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue({
+      where: testRunner.fn(() => mockQueryBuilder),
+      leftJoinAndSelect: testRunner.fn().mockReturnThis(),
+      getOne: testRunner.fn().mockResolvedValue({
         id: 'UUID_VALID',
         title: 'Product 1',
         slug: 'product-1',
@@ -55,51 +58,34 @@ describe('ProductService', () => {
       }),
     };
 
-    const mockProductRepository = {
-      create: jest.fn(),
-      save: jest.fn(),
-      find: jest.fn(),
-      count: jest.fn(),
-      findOneBy: jest.fn(),
-      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
-      findOne: jest.fn(),
-      preload: jest.fn(),
-      remove: jest.fn(),
+    // Create mock repositories
+    productRepository = {
+      create: testRunner.fn(),
+      save: testRunner.fn(),
+      find: testRunner.fn(),
+      count: testRunner.fn(),
+      findOneBy: testRunner.fn(),
+      createQueryBuilder: testRunner.fn().mockReturnValue(mockQueryBuilder),
+      findOne: testRunner.fn(),
+      preload: testRunner.fn(),
+      remove: testRunner.fn(),
     };
 
-    const mockProductImageRepository = {
-      save: jest.fn(),
-      create: jest.fn(),
+    productImageRepository = {
+      save: testRunner.fn(),
+      create: testRunner.fn(),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    // Create mock data source
+    dataSource = {
+      createQueryRunner: testRunner.fn().mockReturnValue(mockQueryRunner),
     };
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ProductsService,
-        {
-          provide: getRepositoryToken(Product),
-          useValue: mockProductRepository,
-        },
-        {
-          provide: getRepositoryToken(ProductImage),
-          useValue: mockProductImageRepository,
-        },
-        {
-          provide: DataSource,
-          useValue: mockDataSource,
-        },
-      ],
-    }).compile();
-
-    service = module.get<ProductsService>(ProductsService);
-    productRepository = module.get<Repository<Product>>(
-      getRepositoryToken(Product),
-    );
-    productImageRepository = module.get<Repository<ProductImage>>(
-      getRepositoryToken(ProductImage),
+    // Directly instantiate the service with mocks
+    service = new ProductsService(
+      productRepository,
+      productImageRepository,
+      dataSource
     );
   });
 
@@ -127,9 +113,9 @@ describe('ProductService', () => {
       user,
     } as unknown as Product;
 
-    jest.spyOn(productRepository, 'create').mockReturnValue(product);
-    jest.spyOn(productRepository, 'save').mockResolvedValue(product);
-    jest
+    testRunner.spyOn(productRepository, 'create').mockReturnValue(product);
+    testRunner.spyOn(productRepository, 'save').mockResolvedValue(product);
+    testRunner
       .spyOn(productImageRepository, 'create')
       .mockImplementation((imageData) => imageData as unknown as ProductImage);
 
@@ -145,7 +131,7 @@ describe('ProductService', () => {
   });
 
   it('should throw a BadRequestException if create product fails', async () => {
-    jest.spyOn(productRepository, 'save').mockRejectedValue({
+    testRunner.spyOn(productRepository, 'save').mockRejectedValue({
       code: '23505',
       detail: 'Cannot create product because XYZ',
     });
@@ -173,8 +159,8 @@ describe('ProductService', () => {
       { id: '2', title: 'Product 2', images: [{ id: '2', url: 'image2.jpg' }] },
     ] as unknown as Product[];
 
-    jest.spyOn(productRepository, 'find').mockResolvedValue(products);
-    jest.spyOn(productRepository, 'count').mockResolvedValue(2);
+    testRunner.spyOn(productRepository, 'find').mockResolvedValue(products);
+    testRunner.spyOn(productRepository, 'count').mockResolvedValue(2);
 
     const result = await service.findAll(dto);
 
@@ -195,7 +181,7 @@ describe('ProductService', () => {
       title: 'Product 1',
     } as Product;
 
-    jest.spyOn(productRepository, 'findOneBy').mockResolvedValue(product);
+    testRunner.spyOn(productRepository, 'findOneBy').mockResolvedValue(product);
 
     const result = await service.findOne(productId);
 
@@ -208,7 +194,7 @@ describe('ProductService', () => {
   it('should throw an error if id was not found', async () => {
     const productId = '3686bdc9-1acd-4bbc-9f23-34454294a8fa';
 
-    jest.spyOn(productRepository, 'findOneBy').mockResolvedValue(null);
+    testRunner.spyOn(productRepository, 'findOneBy').mockResolvedValue(null);
 
     await expect(service.findOne(productId)).rejects.toThrow(NotFoundException);
     await expect(service.findOne(productId)).rejects.toThrow(
@@ -231,7 +217,7 @@ describe('ProductService', () => {
     const dto = {} as UpdateProductDto;
     const user = {} as User;
 
-    jest.spyOn(productRepository, 'preload').mockResolvedValue(null);
+    testRunner.spyOn(productRepository, 'preload').mockResolvedValue(null);
 
     await expect(service.update('abc', dto, user)).rejects.toThrow(
       new NotFoundException(`Product with id: abc not found`),
@@ -256,7 +242,7 @@ describe('ProductService', () => {
       description: 'some description',
     } as unknown as Product;
 
-    jest.spyOn(productRepository, 'preload').mockResolvedValue(product);
+    testRunner.spyOn(productRepository, 'preload').mockResolvedValue(product);
 
     const updatedProduct = await service.update(productId, dto, user);
 
@@ -288,7 +274,7 @@ describe('ProductService', () => {
       description: 'some description',
     } as unknown as Product;
 
-    jest.spyOn(productRepository, 'preload').mockResolvedValue(product);
+    testRunner.spyOn(productRepository, 'preload').mockResolvedValue(product);
 
     await service.update(productId, dto, user);
 
