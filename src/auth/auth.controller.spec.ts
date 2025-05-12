@@ -1,8 +1,6 @@
 import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
-import { CreateUserDto, LoginUserDto } from './dto';
 import { User } from './entities/user.entity';
-import { fn, spyOn } from '../test-helpers';
+import { fn } from '../test-helpers';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 
 describe('AuthController', () => {
@@ -12,7 +10,7 @@ describe('AuthController', () => {
   beforeEach(() => {
     // Create custom mocks for this specific test
     authService = {
-      create: fn().mockImplementation((dto) => {
+      create: fn().mockImplementation((dto: { email: any; fullName: any; }) => {
         return {
           user: {
             id: 'test-id',
@@ -24,7 +22,7 @@ describe('AuthController', () => {
           token: 'test-token'
         };
       }),
-      login: fn().mockImplementation((dto) => {
+      login: fn().mockImplementation((dto: { email: any; }) => {
         return {
           user: {
             id: 'test-id',
@@ -36,7 +34,7 @@ describe('AuthController', () => {
           token: 'test-token'
         };
       }),
-      checkAuthStatus: fn().mockImplementation((user) => {
+      checkAuthStatus: fn().mockImplementation((user: any) => {
         return {
           user,
           token: 'test-token'

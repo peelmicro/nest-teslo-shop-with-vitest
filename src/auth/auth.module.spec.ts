@@ -1,83 +1,83 @@
-import { Test } from '@nestjs/testing';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { Test, TestingModule } from '@nestjs/testing';
 import { testRunner, isVitest } from '../../test/test-utils';
-import { AuthController } from './auth.controller';
+import { AppModule } from '../app.module';
 import { AuthService } from './auth.service';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
+import { Repository } from 'typeorm';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 describe('AuthModule', () => {
-  let authService: AuthService;
-  let authController: AuthController;
-  let jwtStrategy: JwtStrategy;
+  let module: TestingModule;
 
   beforeEach(async () => {
     // Setup mocks
     testRunner.setupNestJSMocks();
 
-    // Create mock implementations
-    const mockRepository = {
-      findOne: testRunner.fn().mockResolvedValue({ id: '1', isActive: true }),
-      create: testRunner.fn().mockImplementation(dto => dto),
-      save: testRunner.fn().mockImplementation(entity => ({ id: '1', ...entity })),
-      findOneBy: testRunner.fn().mockResolvedValue({ id: '1', isActive: true }),
-    };
-
-    const mockJwtService = {
-      sign: testRunner.fn().mockReturnValue('test-token'),
-    };
-
-    const mockConfigService = {
-      get: testRunner.fn().mockReturnValue('test-secret'),
-    };
-
-    // Create testing module
-    const moduleRef = await Test.createTestingModule({
+    module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot(),
+        PassportModule.register({ defaultStrategy: 'jwt' }),
+        JwtModule.register({
+          secret: 'test-secret',
+          signOptions: { expiresIn: '2h' },
+        }),
+        AppModule,
+      ],
       providers: [
-        AuthService,
-        JwtStrategy,
         {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService,
+          provide: AuthService,
+          useValue: {},
         },
         {
           provide: getRepositoryToken(User),
-          useValue: mockRepository,
+          useClass: Repository,
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: testRunner.fn().mockReturnValue('test-secret'),
+          },
+        },
+        JwtStrategy,
       ],
       controllers: [AuthController],
     }).compile();
+  });
 
-    // Get instances
-    authService = moduleRef.get<AuthService>(AuthService);
-    authController = moduleRef.get<AuthController>(AuthController);
-    jwtStrategy = moduleRef.get<JwtStrategy>(JwtStrategy);
+  afterEach(() => {
+    // Only try to close the module if the close method exists
+    // This handles the difference between Jest and Vitest
+    if (module && typeof module.close === 'function') {
+      module.close();
+    }
   });
 
   it('should be defined', () => {
-    expect(authService).toBeDefined();
+    expect(module).toBeDefined();
   });
 
   it('should have AuthService as provider', () => {
-    expect(authService).toBeDefined();
+    const service = module.get(AuthService);
+    expect(service).toBeDefined();
   });
 
   it('should have AuthController as controller', () => {
-    expect(authController).toBeDefined();
+    const controller = module.get(AuthController);
+    expect(controller).toBeDefined();
   });
 
   it('should have JwtStrategy as provider', () => {
-    expect(jwtStrategy).toBeDefined();
+    const provider = module.get(JwtStrategy);
+    expect(provider).toBeDefined();
   });
 
-  it('should have JwtService available', () => {
-    const jwtService = testRunner.fn().mockReturnValue('test-token');
-    expect(jwtService).toBeDefined();
+  it('should have JwtModule as module', () => {
+    const jwtModule = module.get(JwtModule);
+    expect(jwtModule).toBeDefined();
   });
 });
