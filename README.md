@@ -407,8 +407,6 @@ When writing tests that work with both Jest and Vitest, follow these guidelines:
 | Memory (max)  | 466MB    | 172MB      | Vitest uses less memory    |
 | Page faults   | 1,520,000| 541,000    | Vitest has 64% fewer page faults |
 
-| Page faults | 1520307 | 541655 | Vitest has 64% fewer page faults |
-
 ## Key Implementation Changes in This Version
 
 This version builds on the previous foundation with several important improvements:
