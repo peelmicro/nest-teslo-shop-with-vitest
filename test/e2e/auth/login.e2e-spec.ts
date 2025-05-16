@@ -24,6 +24,7 @@ describe('Auth - Login', () => {
   let userRepository: Repository<User>;
 
   beforeAll(async () => {
+    // Create testing module and app
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -39,23 +40,60 @@ describe('Auth - Login', () => {
 
     await app.init();
 
+    // Get user repository
     userRepository = app.get<Repository<User>>(getRepositoryToken(User));
 
-    userRepository.delete({ email: testingUser.email });
-    userRepository.delete({ email: testingAdminUser.email });
+    // Clean up any existing test users
+    await userRepository.delete({ email: testingUser.email });
+    await userRepository.delete({ email: testingAdminUser.email });
 
+    // Register test user
     const responseUser = await request(app.getHttpServer())
       .post('/auth/register')
-      .send(testingUser);
+      .send({
+        email: testingUser.email,
+        password: testingUser.password,
+        fullName: testingUser.fullName
+      });
 
+    if (responseUser.status !== 201) {
+      console.error('Failed to register test user:', responseUser.body);
+      throw new Error('Failed to register test user');
+    }
+
+    // Register admin user
     const responseAdmin = await request(app.getHttpServer())
       .post('/auth/register')
-      .send(testingAdminUser);
+      .send({
+        email: testingAdminUser.email,
+        password: testingAdminUser.password,
+        fullName: testingAdminUser.fullName
+      });
 
+    if (responseAdmin.status !== 201) {
+      console.error('Failed to register admin user:', responseAdmin.body);
+      throw new Error('Failed to register admin user');
+    }
+
+    // Update admin user role
     await userRepository.update(
       { email: testingAdminUser.email },
       { roles: ['admin'] },
     );
+    
+    // Verify the test user exists and is active
+    const testUser = await userRepository.findOne({ where: { email: testingUser.email } });
+    if (!testUser) {
+      throw new Error('Test user was not created');
+    }
+    
+    // Log test user details for debugging
+    console.log('Test user created:', {
+      id: testUser.id,
+      email: testUser.email,
+      isActive: testUser.isActive,
+      roles: testUser.roles
+    });
   });
 
   afterAll(async () => {

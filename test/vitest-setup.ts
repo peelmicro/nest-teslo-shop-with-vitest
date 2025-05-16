@@ -24,9 +24,12 @@ class UnauthorizedException extends Error {
 // Get common mocks for auth, fs, etc.
 const mocks = {
   auth: {
-    hashSync: vi.fn().mockReturnValue('hashed-password'),
+    hash: vi.fn().mockImplementation((data, salt) => Promise.resolve(`hashed-${data}`)),
+    hashSync: vi.fn().mockImplementation((data) => `hashed-${data}`),
+    compare: vi.fn().mockResolvedValue(true),
     compareSync: vi.fn().mockReturnValue(true),
-    genSaltSync: vi.fn().mockReturnValue('salt')
+    genSaltSync: vi.fn().mockReturnValue('salt'),
+    genSalt: vi.fn().mockResolvedValue('salt')
   },
   fs: {
     existsSync: vi.fn().mockReturnValue(true),
@@ -140,6 +143,12 @@ const createMockApp = () => ({
 // Create a shared mockApp that will be consistent across all tests
 const mockApp = createMockApp();
 
+// Export the setup function
+export function setupVitestMocks() {
+  // Setup mocks here
+  console.log('Setting up Vitest mocks');
+}
+
 // Mock NestJS core to prevent actual app startup
 vi.mock('@nestjs/core', async () => {
   const originalModule = await vi.importActual('@nestjs/core');
@@ -204,9 +213,80 @@ const createSupertestMock = () => {
   };
 };
 
-vi.mock('supertest', async () => {
-  return createSupertestMock();
-});
+// Create a mock implementation for supertest
+const createSupertestImplementation = () => {
+  const mockFn = (app: any) => {
+    const mock = {
+      get: (url: string) => ({
+        expect: (status: number) => ({ body: {}, status }),
+        set: () => ({
+          expect: (status: number) => ({ body: {}, status }),
+        })
+      }),
+      post: (url: string) => ({
+        send: (data: any) => ({
+          expect: (status: number) => ({ body: data, status }),
+          set: () => ({
+            expect: (status: number) => ({ body: data, status }),
+          })
+        }),
+        attach: (field: string, buffer: Buffer, filename: string) => ({
+          expect: (status: number) => ({
+            body: { field, filename, size: buffer.length },
+            status
+          })
+        })
+      })
+    };
+    return mock;
+  };
+
+  // Add all HTTP methods to the mock
+  const methods = ['get', 'post', 'put', 'delete', 'patch'];
+  methods.forEach(method => {
+    mockFn[method] = () => ({
+      send: () => ({
+        expect: () => ({}),
+        set: () => ({
+          expect: () => ({})
+        })
+      })
+    });
+  });
+
+  return mockFn;
+};
+
+// Create the mock implementation
+const supertestImplementation = createSupertestImplementation();
+
+// Mock the supertest module
+const supertestMock = {
+  __esModule: true,
+  default: supertestImplementation,
+  ...supertestImplementation({})
+};
+
+vi.mock('supertest', () => supertestMock);
+
+// Mock bcrypt
+vi.mock('bcrypt', () => ({
+  __esModule: true,
+  default: {
+    hash: vi.fn().mockImplementation((data, salt) => Promise.resolve(`hashed-${data}`)),
+    compare: vi.fn().mockResolvedValue(true),
+    hashSync: vi.fn().mockImplementation((data) => `hashed-${data}`),
+    compareSync: vi.fn().mockReturnValue(true),
+    genSalt: vi.fn().mockResolvedValue('salt'),
+    genSaltSync: vi.fn().mockReturnValue('salt')
+  },
+  hash: vi.fn().mockImplementation((data, salt) => Promise.resolve(`hashed-${data}`)),
+  compare: vi.fn().mockResolvedValue(true),
+  hashSync: vi.fn().mockImplementation((data) => `hashed-${data}`),
+  compareSync: vi.fn().mockReturnValue(true),
+  genSalt: vi.fn().mockResolvedValue('salt'),
+  genSaltSync: vi.fn().mockReturnValue('salt')
+}));
 
 // Store original env
 const originalEnv = { ...process.env };
