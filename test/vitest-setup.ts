@@ -2,10 +2,34 @@
  * Vitest setup file - framework-agnostic configuration
  */
 import { vi } from 'vitest';
-import { testRunner } from './test-utils';
 
 // Make sure reflection metadata is loaded
 import 'reflect-metadata';
+
+// Mock required modules
+vi.mock('fs', () => ({
+  existsSync: vi.fn().mockReturnValue(true),
+  promises: {
+    readFile: vi.fn().mockResolvedValue('mock file content')
+  }
+}));
+
+// Global test utilities
+(global as any).http = (app: any) => ({
+  post: (url: string) => ({
+    send: (data: any) => ({
+      expect: (status: number) => ({
+        toReturn: async () => {
+          const res = await (app as any).getHttpServer()
+            .post(url)
+            .send(data)
+            .expect(status);
+          return res;
+        }
+      })
+    })
+  })
+});
 
 // Create global functions that can be used directly
 // This ensures framework-agnostic test code works with both Jest and Vitest
@@ -176,44 +200,7 @@ vi.mock('@nestjs/common', async () => {
   };
 });
 
-// Mock for supertest - using a simpler, more direct approach
-// This handles CommonJS-style imports (import * as request from 'supertest')
-const createSupertestMock = () => {
-  // The chainable request methods
-  const chainMethods = {
-    get: vi.fn().mockReturnThis(),
-    post: vi.fn().mockReturnThis(),
-    put: vi.fn().mockReturnThis(),
-    patch: vi.fn().mockReturnThis(),
-    delete: vi.fn().mockReturnThis(),
-    set: vi.fn().mockReturnThis(),
-    send: vi.fn().mockReturnThis(),
-    query: vi.fn().mockReturnThis(),
-    expect: vi.fn().mockImplementation((status) => {
-      return {
-        expect: vi.fn().mockReturnThis(),
-        end: vi.fn().mockImplementation((cb) => cb && cb(null, { 
-          status,
-          statusCode: status,
-          body: {},
-          text: 'Mock response'
-        })),
-      };
-    }),
-  };
-  
-  // The main supertest function
-  const supertestFn = vi.fn().mockReturnValue(chainMethods);
-  
-  // For CommonJS require('supertest')
-  return {
-    default: supertestFn,
-    // For CommonJS 'import * as request'
-    __esModule: true
-  };
-};
-
-// Create a mock implementation for supertest
+// Create mock implementation for supertest
 const createSupertestImplementation = () => {
   const mockFn = (app: any) => {
     const mock = {

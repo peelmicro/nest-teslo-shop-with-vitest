@@ -5,12 +5,13 @@ import { Repository } from 'typeorm';
 import { User } from '../../src/auth/entities/user.entity';
 import { AppModule } from '../../src/app.module';
 import { testRunner } from '../test-utils';
+import { ValidationPipe } from '@nestjs/common';
 
 // Define test context interface
 export interface TestContext {
   app: INestApplication;
+  module: TestingModule;
   userRepository: Repository<User>;
-  moduleFixture: TestingModule;
 }
 
 // Initialize test runner mocks before any tests run
@@ -39,25 +40,24 @@ testRunner.mock('bcrypt', () => ({
  * Creates a test application with the necessary configuration
  */
 export async function setupTestApp(): Promise<TestContext> {
-  // Initialize the testing module
-  const moduleFixture = await Test.createTestingModule({
-    imports: [
-      AppModule,
-      TypeOrmModule.forFeature([User]),
-    ],
+  const module = await Test.createTestingModule({
+    imports: [AppModule],
   }).compile();
 
-  // Create the application
-  const app = moduleFixture.createNestApplication();
+  const app = module.createNestApplication();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    })
+  );
   await app.init();
 
-  // Get the user repository
-  const userRepository = moduleFixture.get<Repository<User>>(getRepositoryToken(User));
-
   return {
+    module,
     app,
-    userRepository,
-    moduleFixture,
+    userRepository: module.get(getRepositoryToken(User))
   };
 }
 
@@ -65,11 +65,9 @@ export async function setupTestApp(): Promise<TestContext> {
  * Tears down the test application
  */
 export async function teardownTestApp(context: TestContext): Promise<void> {
-  const { app, moduleFixture } = context;
-  
   // Clean up resources
-  await app.close();
-  await moduleFixture.close();
+  await context.app.close();
+  await context.module.close();
 }
 
 /**

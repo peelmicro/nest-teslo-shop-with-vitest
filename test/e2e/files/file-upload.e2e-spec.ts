@@ -1,28 +1,35 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+
+import * as requestCjs from 'supertest';
+// @ts-ignore
+import requestEsm from 'supertest';
+
+// Helper to detect Vitest
+const isVitest = typeof globalThis.vi !== 'undefined';
+// Framework-agnostic request import
+const request = isVitest ? requestEsm : requestCjs;
 import { join } from 'path';
 import * as fs from 'fs';
 
 import { AppModule } from '../../../src/app.module';
-import { testRunner, isVitest } from '../../test-utils';
-import { setupTestApp, teardownTestApp, TestContext } from '../test-setup';
+import { testRunner } from '../../test-utils';
+import { setupTestApp, teardownTestApp } from '../test-setup';
+import { http } from '../../../test/test-utils';
 
 describe('FilesModule (e2e)', () => {
+  let context: Awaited<ReturnType<typeof setupTestApp>>;
   let app: INestApplication;
-  let moduleFixture: TestingModule;
   let testImagePath: string;
-  let context: TestContext;
 
   beforeAll(async () => {
     if (isVitest) {
       // For Vitest, use the setupTestApp utility
       context = await setupTestApp();
       app = context.app;
-      moduleFixture = context.moduleFixture;
     } else {
       // For Jest, use the standard setup
-      moduleFixture = await Test.createTestingModule({
+      const moduleFixture = await Test.createTestingModule({
         imports: [AppModule],
       }).compile();
 
@@ -66,17 +73,31 @@ describe('FilesModule (e2e)', () => {
       jest.spyOn(fs, 'createReadStream').mockReturnValue({
         pipe: jest.fn().mockReturnThis(),
       } as any);
+      // Mock the file upload for Jest
+      jest.mock('multer', () => {
+        return () => ({
+          single: () => (req: any, res: any, next: any) => {
+            req.file = mockFile;
+            next();
+          }
+        });
+      });
     }
 
-    // Mock the file upload
-    jest.mock('multer', () => {
-      return () => ({
-        single: () => (req: any, res: any, next: any) => {
-          req.file = mockFile;
-          next();
-        }
+    // For Vitest, mock multer using vi.mock
+    if (isVitest) {
+      globalThis.vi.mock('multer', () => {
+        return {
+          default: () => ({
+            single: () => (req: any, res: any, next: any) => {
+              req.file = mockFile;
+              next();
+            }
+          }),
+          diskStorage: () => ({}) // Provide a dummy diskStorage export
+        };
       });
-    });
+    }
   });
 
   afterAll(async () => {

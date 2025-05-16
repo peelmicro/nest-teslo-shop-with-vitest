@@ -6,7 +6,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/e2e/**/*.e2e-spec.ts'],
-    setupFiles: ['./test/vitest-setup.ts'],
+
     deps: {
       interopDefault: true,
       // For proper ESM/CommonJS interoperability

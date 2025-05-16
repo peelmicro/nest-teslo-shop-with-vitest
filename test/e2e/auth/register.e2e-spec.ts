@@ -1,12 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+import * as requestCjs from 'supertest';
+// @ts-ignore
+import requestEsm from 'supertest';
+
+const isVitest = typeof globalThis.vi !== 'undefined';
+const request = isVitest ? requestEsm : requestCjs;
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AppModule } from '../../../src/app.module';
 import { User } from '../../../src/auth/entities/user.entity';
-import { testRunner, isVitest } from '../../test-utils';
+import { testRunner } from '../../test-utils';
 import { setupTestApp, teardownTestApp } from '../test-setup';
 
 const testingUser = {

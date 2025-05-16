@@ -1,6 +1,6 @@
-# NestJS Testing with Jest and Vitest - Part 2
+# NestJS Testing with Jest and Vitest
 
-This project demonstrates how to set up a NestJS e-commerce application to work with both Jest and Vitest testing frameworks simultaneously. This represents the second part of the "NestJS + Testing: Pruebas unitarias y end to end (e2e)" course by dev/talles, available on [dev/talles: NestJS + Testing: Pruebas unitarias y end to end (e2e)](https://cursos.devtalles.com/courses/NestJS-Testing) and [Udemy: NestJS + Testing: Pruebas unitarias y end to end (e2e)](https://www.udemy.com/course/nestjs-testing-e2e/). The original application (Teslo Shop) was created for a different NestJS course and has been adapted to work with both testing frameworks.
+This project demonstrates how to set up a NestJS e-commerce application to work with both Jest and Vitest testing frameworks simultaneously. The original application (Teslo Shop) was adapted to support both frameworks for unit and end-to-end (e2e) testing.
 
 ## Project Setup
 
@@ -8,11 +8,141 @@ This project demonstrates how to set up a NestJS e-commerce application to work 
 # Install dependencies
 npm install
 
-# Run Jest tests
+# Run Jest unit tests
 npm run test
 
-# Run Vitest tests
+# Run Vitest unit tests
 npm run test:vitest
+
+# Run Jest e2e tests
+npm run test:e2e
+
+# Run Vitest e2e tests
+npm run test:e2e:vitest
+
+# Compare Jest and Vitest (unit)
+npm run test:compare
+
+# Compare Jest and Vitest (e2e)
+npm run test:e2e:compare
+```
+
+---
+
+## Unit Testing with Jest and Vitest
+
+This codebase allows you to run the exact same unit tests with both Jest and Vitest, using a simple, robust, and maintainable approach:
+
+### 1. Dynamic Supertest Import
+To avoid CommonJS/ESM issues, every unit test uses:
+
+```typescript
+import * as requestCjs from 'supertest';
+// @ts-ignore
+import requestEsm from 'supertest';
+const isVitest = typeof globalThis.vi !== 'undefined';
+const request = isVitest ? requestEsm : requestCjs;
+```
+
+This ensures compatibility with both runners.
+
+### 2. Framework-Agnostic Test Utilities
+The `test/test-utils.ts` file provides utilities that work with both Jest and Vitest:
+
+```typescript
+const isVitest = typeof globalThis.vi !== 'undefined';
+export { isVitest };
+
+export const testRunner = {
+  fn: (impl?: any) => isVitest ? globalThis.vi.fn(impl) : jest.fn(impl),
+  spyOn: (obj: any, method: string) => isVitest ? globalThis.vi.spyOn(obj, method) : jest.spyOn(obj, method),
+  // ...
+};
+```
+
+### 3. Minimal Setup Files
+- `test/jest-setup.ts` and `test/vitest-setup.ts` only contain required global mocks for each framework.
+- No application-specific logic is included in setup files.
+
+### 4. Self-contained Test Files
+- All application-specific mocking and setup is performed within the test files.
+- No framework detection or conditional logic is needed in test logic itself.
+
+const isVitest = typeof globalThis.vi !== 'undefined';
+const request = isVitest ? requestEsm : requestCjs;
+
+// Usage in tests:
+await request(app.getHttpServer()).post('/endpoint').send(data).expect(201);
+
+### 5. Writing Tests Compatible with Both Frameworks
+
+- **Import test utilities:**
+  ```typescript
+  import { testRunner } from '../../test/test-utils';
+  ```
+- **Use framework-agnostic utilities:**
+  ```typescript
+  const mockFn = testRunner.fn();
+  const spy = testRunner.spyOn(service, 'method');
+  ```
+- **Handle framework-specific mocks in the test file:**
+  ```typescript
+  if (isVitest) {
+    globalThis.vi.mock('module', () => ({}));
+  } else {
+    jest.mock('module', () => ({}));
+  }
+  ```
+- **Assertions:** Both frameworks share similar assertion APIs.
+
+---
+
+## Framework-Agnostic End-to-End (e2e) Testing
+
+### The Supertest Compatibility Challenge
+Supertest is a CommonJS module, which can cause issues in Vitest's ESM mode. This project solves it by dynamically importing the correct version:
+
+```typescript
+import * as requestCjs from 'supertest';
+// @ts-ignore
+import requestEsm from 'supertest';
+const isVitest = typeof globalThis.vi !== 'undefined';
+const request = isVitest ? requestEsm : requestCjs;
+```
+
+### Example E2E Test
+```typescript
+describe('Auth (e2e)', () => {
+  it('should register a user', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: 'test@example.com', password: '123456' })
+      .expect(201);
+    expect(res.body).toHaveProperty('id');
+  });
+});
+```
+
+### Key Design Principles
+1. **Framework detection**: Use `isVitest` to branch logic.
+2. **Consistent API**: Use the same test helpers and request patterns in all tests.
+3. **Self-contained tests**: All app-specific mocks live in the test file.
+4. **Clean separation**: Setup files are framework-specific only, not app-specific.
+
+---
+
+## Adapting to Your Own NestJS Application
+
+1. Copy the core `test-utils.ts` file for framework-agnostic utilities.
+2. Write your own application-specific handlers as needed.
+3. Organize test data separately for maintainability.
+4. Write e2e tests using the shared request pattern.
+
+---
+
+## License
+
+This project is [MIT licensed](LICENSE).
 
 # Compare performance between Jest and Vitest
 npm run test:compare
@@ -259,13 +389,24 @@ When writing tests that work with both Jest and Vitest, follow these guidelines:
 
 ## Performance Comparison
 
-Based on our latest testing with SWC for Vitest, here's the updated performance comparison:
+### Unit Test Performance
 
-| Metric | Jest | Vitest | Difference |
-|--------|------|--------|------------|
-| Total time | 32.98s | 8.75s | Vitest is 3.7x faster |
-| CPU usage | 1079% | 918% | Vitest uses 15% less CPU |
-| Memory (max) | 460MB | 171MB | Vitest uses 63% less memory |
+| Metric         | Jest      | Vitest    | Difference                 |
+|---------------|-----------|-----------|----------------------------|
+| Total time    | 15.6s     | 4.2s      | Vitest is ~3.7x faster     |
+| CPU usage     | 1162%     | 956%      | Vitest uses less CPU       |
+| Memory (max)  | 467MB     | 176MB     | Vitest uses less memory    |
+| Page faults   | 1,570,000 | 656,000   | Vitest has 58% fewer page faults |
+
+### End-to-End (e2e) Test Performance
+
+| Metric         | Jest e2e | Vitest e2e | Difference                 |
+|---------------|----------|------------|----------------------------|
+| Total time    | 8.8s     | 2.4s       | Vitest is ~3.7x faster     |
+| CPU usage     | 625%     | 508%       | Vitest uses less CPU       |
+| Memory (max)  | 466MB    | 172MB      | Vitest uses less memory    |
+| Page faults   | 1,520,000| 541,000    | Vitest has 64% fewer page faults |
+
 | Page faults | 1520307 | 541655 | Vitest has 64% fewer page faults |
 
 ## Key Implementation Changes in This Version

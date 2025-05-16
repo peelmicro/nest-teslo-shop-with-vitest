@@ -16,16 +16,32 @@ export interface Mock<T = any> {
 // HTTP method types
 export type HttpMethod = 'get' | 'post' | 'put' | 'delete' | 'patch' | 'head' | 'options';
 
+import * as supertest from 'supertest';
+
+declare module 'supertest' {
+  interface Response {
+    status: number;
+    body: any;
+  }
+}
+
 // HTTP request interface
 export interface HttpRequest {
-  (): any;
-  get: Mock;
-  post: Mock;
-  put: Mock;
-  delete: Mock;
-  patch: Mock;
-  head: Mock;
-  options: Mock;
+  post: (url: string) => {
+    send: (data: any) => {
+      expect: (status: number) => {
+        toReturn: () => Promise<supertest.Response>;
+      };
+    };
+    expect: (status: number) => {
+      toReturn: () => Promise<supertest.Response>;
+    };
+  };
+  get: (url: string) => {
+    expect: (status: number) => {
+      toReturn: () => Promise<supertest.Response>;
+    };
+  };
 }
 
 // Base interface for the test runner
@@ -46,29 +62,9 @@ export interface TestRunner {
   resetAllMocks(): void;
   restoreAllMocks(): void;
   
-  // HTTP testing
-  http: HttpRequest;
-  
-  // NestJS specific mocks
-  setupNestJSMocks(options?: {
-    mockNestFactory?: boolean;
-    mockValidationPipe?: boolean;
-    preventAppStartup?: boolean;
-    customApp?: any;
-  }): void;
-  
-  // Common guards
-  createCommonGuardMocks(): {
-    AuthGuard: new () => any;
-    JwtAuthGuard: new () => any;
-    RolesGuard: new (reflector: any) => any;
-  };
-  
   // HTTP testing utilities
   http: {
-    (app: any): {
-      [key in HttpMethod]: (url: string) => HttpRequest;
-    };
+    (app: any): HttpRequest;
     get: (url: string) => Promise<any>;
     post: (url: string, data?: any) => Promise<any>;
     put: (url: string, data?: any) => Promise<any>;

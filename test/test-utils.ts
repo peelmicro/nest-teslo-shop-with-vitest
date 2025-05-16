@@ -3,8 +3,12 @@
  * This file can be reused across any NestJS application
  */
 
+import * as requestCjs from 'supertest';
+// @ts-ignore
+import requestEsm from 'supertest';
 // Detect which test framework is being used
 const isVitest = typeof globalThis.vi !== 'undefined';
+const request = isVitest ? requestEsm : requestCjs;
 
 // Export the framework detection flag for use in test files
 export { isVitest };
@@ -688,3 +692,59 @@ export const BadRequestException = mockExceptions.BadRequestException;
 export const UnauthorizedException = mockExceptions.UnauthorizedException;
 export const ForbiddenException = mockExceptions.ForbiddenException;
 export const NotFoundException = mockExceptions.NotFoundException;
+
+import { INestApplication } from '@nestjs/common';
+
+
+
+interface TestResponse {
+  status: number;
+  body: any;
+}
+
+interface HttpUtils {
+  post(url: string): {
+    send(data: any): {
+      expect(status: number): {
+        toReturn(): Promise<TestResponse>;
+      };
+    };
+  };
+  get(url: string): {
+    expect(status: number): {
+      toReturn(): Promise<TestResponse>;
+    };
+  };
+}
+
+export const http: (app: INestApplication) => HttpUtils = (app) => ({
+  post: (url) => ({
+    send: (data) => ({
+      expect: (status) => ({
+        toReturn: async () => {
+          const res = await request(app.getHttpServer())
+            .post(url)
+            .send(data)
+            .expect(status);
+          return {
+            status: res.status,
+            body: res.body
+          };
+        }
+      })
+    })
+  }),
+  get: (url) => ({
+    expect: (status) => ({
+      toReturn: async () => {
+        const res = await request(app.getHttpServer())
+          .get(url)
+          .expect(status);
+        return {
+          status: res.status,
+          body: res.body
+        };
+      }
+    })
+  })
+});

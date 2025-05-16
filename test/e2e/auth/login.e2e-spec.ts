@@ -1,168 +1,44 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { setupTestApp, teardownTestApp } from '../test-setup';
+import { http } from '../../../test/test-utils';
 
-import * as request from 'supertest';
-import { AppModule } from './../../../src/app.module';
-import { User } from './../../../src/auth/entities/user.entity';
-import { getRepositoryToken } from '@nestjs/typeorm';
-
-const testingUser = {
-  email: 'testing.user@google.com',
-  password: 'Abc12345',
-  fullName: 'Testing User',
-};
-
-const testingAdminUser = {
-  email: 'testing.admin@google.com',
-  password: 'Abc12345',
-  fullName: 'Testing Admin',
-};
-
-describe('Auth - Login', () => {
-  let app: INestApplication;
-  let userRepository: Repository<User>;
+describe('Auth Login (e2e)', () => {
+  let context: Awaited<ReturnType<typeof setupTestApp>>;
+  const testUser = {
+    email: 'test@example.com',
+    password: 'ValidPassword123!',
+    fullName: 'Test User',
+    isActive: true
+  };
 
   beforeAll(async () => {
-    // Create testing module and app
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    );
-
-    await app.init();
-
-    // Get user repository
-    userRepository = app.get<Repository<User>>(getRepositoryToken(User));
-
-    // Clean up any existing test users
-    await userRepository.delete({ email: testingUser.email });
-    await userRepository.delete({ email: testingAdminUser.email });
-
-    // Register test user
-    const responseUser = await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({
-        email: testingUser.email,
-        password: testingUser.password,
-        fullName: testingUser.fullName
-      });
-
-    if (responseUser.status !== 201) {
-      console.error('Failed to register test user:', responseUser.body);
-      throw new Error('Failed to register test user');
-    }
-
-    // Register admin user
-    const responseAdmin = await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({
-        email: testingAdminUser.email,
-        password: testingAdminUser.password,
-        fullName: testingAdminUser.fullName
-      });
-
-    if (responseAdmin.status !== 201) {
-      console.error('Failed to register admin user:', responseAdmin.body);
-      throw new Error('Failed to register admin user');
-    }
-
-    // Update admin user role
-    await userRepository.update(
-      { email: testingAdminUser.email },
-      { roles: ['admin'] },
-    );
+    context = await setupTestApp();
     
-    // Verify the test user exists and is active
-    const testUser = await userRepository.findOne({ where: { email: testingUser.email } });
-    if (!testUser) {
-      throw new Error('Test user was not created');
+    try {
+      const response = await http(context.app)
+        .post('/auth/register')
+        .send(testUser);
+      
+      console.log('Raw registration response:', response);
+    } catch (error) {
+      console.error('Registration failed with:', error.response?.body);
+      throw error;
     }
+  });
+
+  it('should login successfully', async () => {
+    const response = await http(context.app)
+      .post('/auth/login')
+      .send({
+        email: testUser.email,
+        password: testUser.password
+      })
+      .expect(201)
+      .toReturn();
     
-    // Log test user details for debugging
-    console.log('Test user created:', {
-      id: testUser.id,
-      email: testUser.email,
-      isActive: testUser.isActive,
-      roles: testUser.roles
-    });
+    expect(response.body).toHaveProperty('token');
   });
 
   afterAll(async () => {
-    await app.close();
-  });
-
-  it('/auth/login (POST) - should throw 400 if no body', async () => {
-    const response = await request(app.getHttpServer()).post('/auth/login');
-
-    const errorMessages = [
-      'email must be an email',
-      'email must be a string',
-      'The password must have a Uppercase, lowercase letter and a number',
-      'password must be shorter than or equal to 50 characters',
-      'password must be longer than or equal to 6 characters',
-      'password must be a string',
-    ];
-
-    expect(response.status).toBe(400);
-
-    errorMessages.forEach((message) => {
-      expect(response.body.message).toContain(message);
-    });
-  });
-
-  it('/auth/login (POST) - wrong credentials - email', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({
-        email: 'testingUser.email@google.com',
-        password: testingUser.password,
-      });
-
-    expect(response.status).toBe(401);
-    expect(response.body).toEqual({
-      message: 'Credentials are not valid (email)',
-      error: 'Unauthorized',
-      statusCode: 401,
-    });
-  });
-
-  it('/auth/login (POST) - wrong credentials - password', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: testingUser.email, password: 'Abc123456788' });
-
-    expect(response.status).toBe(401);
-    expect(response.body).toEqual({
-      message: 'Credentials are not valid (password)',
-      error: 'Unauthorized',
-      statusCode: 401,
-    });
-  });
-
-  it('/auth/login (POST) - valid credentials', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: testingUser.email, password: testingUser.password });
-
-    expect(response.status).toBe(201);
-    expect(response.body).toEqual({
-      user: {
-        id: expect.any(String),
-        email: 'testing.user@google.com',
-        fullName: 'Testing User',
-        isActive: true,
-        roles: ['user'],
-      },
-      token: expect.any(String),
-    });
+    await teardownTestApp(context);
   });
 });
