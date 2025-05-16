@@ -9,32 +9,32 @@ import { BadRequestException, InternalServerErrorException, UnauthorizedExceptio
 
 // Create application-specific mocks using the framework-agnostic test utility functions
 describe('AuthService', () => {
-  let authService: AuthService;
-  let userRepository: any;
-  let jwtService: any;
+  let mockAuthService: AuthService;
+  let mockUserRepository: any;
+  let mockJwtService: any;
 
   beforeEach(async () => {
     // Reset mocks
     clearAllMocks();
     
     // Create custom mocks for this specific test
-    userRepository = {
+    mockUserRepository = {
       create: fn(),
       save: fn(),
       findOne: fn(),
       findOneBy: fn()
     };
 
-    jwtService = {
+    mockJwtService = {
       sign: fn().mockReturnValue('mock-token')
     };
 
     // Manually instantiate the service with our mocks
-    authService = new AuthService(userRepository, jwtService);
+    mockAuthService = new AuthService(mockUserRepository, mockJwtService);
   });
 
   it('should be defined', () => {
-    expect(authService).toBeDefined();
+    expect(mockAuthService).toBeDefined();
   });
 
   it('should create a user and return user with token', async () => {
@@ -54,18 +54,18 @@ describe('AuthService', () => {
     } as User;
 
     // Setup the mocks
-    userRepository.create.mockReturnValue(user);
-    userRepository.save.mockResolvedValue(user);
+    mockUserRepository.create.mockReturnValue(user);
+    mockUserRepository.save.mockResolvedValue(user);
     spyOn(bcrypt, 'hashSync').mockReturnValue('hashed_password');
 
-    const result = await authService.create(dto);
+    const result = await mockAuthService.create(dto);
 
     // Check that the user was created with the correct data
-    expect(userRepository.create).toHaveBeenCalledWith({
+    expect(mockUserRepository.create).toHaveBeenCalledWith({
       ...dto,
       password: 'hashed_password',
     });
-    expect(userRepository.save).toHaveBeenCalledWith(user);
+    expect(mockUserRepository.save).toHaveBeenCalledWith(user);
     
     // Check the returned result
     expect(result).toEqual({
@@ -91,18 +91,18 @@ describe('AuthService', () => {
     };
 
     const user = { ...dto, password: 'hashed_password' } as User;
-    userRepository.create.mockReturnValue(user);
+    mockUserRepository.create.mockReturnValue(user);
 
     // Mock save to throw a duplicate key error
-    userRepository.save.mockRejectedValue({ 
+    mockUserRepository.save.mockRejectedValue({ 
       code: '23505', 
       detail: 'Email already exists' 
     });
 
     // Check that the service throws the correct error
-    await expect(authService.create(dto)).rejects.toThrow('Email already exists');
+    await expect(mockAuthService.create(dto)).rejects.toThrow('Email already exists');
     try {
-      await authService.create(dto);
+      await mockAuthService.create(dto);
     } catch (error) {
       expect(error).toBeInstanceOf(BadRequestException);
     }
@@ -116,21 +116,21 @@ describe('AuthService', () => {
     };
 
     const user = { ...dto, password: 'hashed_password' } as User;
-    userRepository.create.mockReturnValue(user);
+    mockUserRepository.create.mockReturnValue(user);
 
     // Mock console.log to avoid polluting the test output
     const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
     // Mock save to throw a generic error
-    userRepository.save.mockRejectedValue({ 
+    mockUserRepository.save.mockRejectedValue({ 
       code: '9999', 
       detail: 'Unhandled error' 
     });
 
     // Check that the service throws the correct error
-    await expect(authService.create(dto)).rejects.toThrow('Please check server logs');
+    await expect(mockAuthService.create(dto)).rejects.toThrow('Please check server logs');
     try {
-      await authService.create(dto);
+      await mockAuthService.create(dto);
     } catch (error) {
       expect(error).toBeInstanceOf(InternalServerErrorException);
     }
@@ -155,13 +155,13 @@ describe('AuthService', () => {
     } as User;
 
     // Setup the mocks
-    userRepository.findOne.mockResolvedValue(user);
+    mockUserRepository.findOne.mockResolvedValue(user);
     spyOn(bcrypt, 'compareSync').mockReturnValue(true);
 
-    const result = await authService.login(dto);
+    const result = await mockAuthService.login(dto);
 
     // Check that the user was found with the correct parameters
-    expect(userRepository.findOne).toHaveBeenCalledWith({
+    expect(mockUserRepository.findOne).toHaveBeenCalledWith({
       where: { email: dto.email },
       select: { email: true, password: true, id: true, fullName: true, roles: true, isActive: true },
     });
@@ -186,12 +186,12 @@ describe('AuthService', () => {
     const dto = { email: 'test@google.com', password: 'Abc123' } as LoginUserDto;
 
     // Mock findOne to return null (user not found)
-    userRepository.findOne.mockResolvedValue(null);
+    mockUserRepository.findOne.mockResolvedValue(null);
 
     // Check that the service throws the correct error
-    await expect(authService.login(dto)).rejects.toThrow('Credentials are not valid (email)');
+    await expect(mockAuthService.login(dto)).rejects.toThrow('Credentials are not valid (email)');
     try {
-      await authService.login(dto);
+      await mockAuthService.login(dto);
     } catch (error) {
       expect(error).toBeInstanceOf(UnauthorizedException);
     }
@@ -201,7 +201,7 @@ describe('AuthService', () => {
     const dto = { email: 'test@google.com', password: 'Abc123' } as LoginUserDto;
 
     // Mock findOne to return a user
-    userRepository.findOne.mockResolvedValue({
+    mockUserRepository.findOne.mockResolvedValue({
       id: 'uuid',
       email: dto.email,
       password: 'wrong_password',
@@ -214,9 +214,9 @@ describe('AuthService', () => {
     spyOn(bcrypt, 'compareSync').mockReturnValue(false);
 
     // Check that the service throws the correct error
-    await expect(authService.login(dto)).rejects.toThrow('Credentials are not valid (password)');
+    await expect(mockAuthService.login(dto)).rejects.toThrow('Credentials are not valid (password)');
     try {
-      await authService.login(dto);
+      await mockAuthService.login(dto);
     } catch (error) {
       expect(error).toBeInstanceOf(UnauthorizedException);
     }
@@ -231,10 +231,10 @@ describe('AuthService', () => {
       roles: ['user'],
     } as User;
 
-    const result = await authService.checkAuthStatus(user);
+    const result = await mockAuthService.checkAuthStatus(user);
 
     // Check that JWT sign was called with the correct payload
-    expect(jwtService.sign).toHaveBeenCalledWith({ id: user.id });
+    expect(mockJwtService.sign).toHaveBeenCalledWith({ id: user.id });
     
     // Check the returned result
     expect(result).toEqual({
@@ -247,12 +247,12 @@ describe('AuthService', () => {
     const dto = {} as CreateUserDto;
     
     // Mock to simulate error during user creation
-    userRepository.create.mockImplementation(() => {
+    mockUserRepository.create.mockImplementation(() => {
       throw new Error('Cannot convert undefined or null to object');
     });
     
-    await expect(authService.create(dto)).rejects.toThrow();
-    expect(userRepository.save).not.toHaveBeenCalled();
+    await expect(mockAuthService.create(dto)).rejects.toThrow();
+    expect(mockUserRepository.save).not.toHaveBeenCalled();
   });
 
   it('should handle user inactive case in login', async () => {
@@ -269,16 +269,16 @@ describe('AuthService', () => {
     } as User;
 
     // Mock findOne to return the inactive user
-    userRepository.findOne.mockResolvedValue(inactiveUser);
+    mockUserRepository.findOne.mockResolvedValue(inactiveUser);
     
     // Password would be correct, but user is inactive
     spyOn(bcrypt, 'compareSync').mockReturnValue(true);
 
     // Now that we've updated the service to check isActive, we should expect an exception
-    await expect(authService.login(dto)).rejects.toThrow('User is inactive, please contact an administrator');
+    await expect(mockAuthService.login(dto)).rejects.toThrow('User is inactive, please contact an administrator');
     
     try {
-      await authService.login(dto);
+      await mockAuthService.login(dto);
     } catch (error) {
       expect(error).toBeInstanceOf(UnauthorizedException);
     }
@@ -295,12 +295,12 @@ describe('AuthService', () => {
     };
 
     const user = { ...dto, password: 'hashed_password' } as User;
-    userRepository.create.mockReturnValue(user);
-    userRepository.save.mockRejectedValue(new Error('Database connection failed'));
+    mockUserRepository.create.mockReturnValue(user);
+    mockUserRepository.save.mockRejectedValue(new Error('Database connection failed'));
     
     const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
-    await expect(authService.create(dto)).rejects.toThrow('Please check server logs');
+    await expect(mockAuthService.create(dto)).rejects.toThrow('Please check server logs');
     
     consoleSpy.mockRestore();
   });
@@ -321,15 +321,15 @@ describe('AuthService', () => {
       roles: ['user'],
     } as User;
 
-    userRepository.create.mockReturnValue(user);
-    userRepository.save.mockResolvedValue(user);
-    jwtService.sign.mockImplementation(() => {
+    mockUserRepository.create.mockReturnValue(user);
+    mockUserRepository.save.mockResolvedValue(user);
+    mockJwtService.sign.mockImplementation(() => {
       throw new Error('JWT signing failed');
     });
     
     const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
-    await expect(authService.create(dto)).rejects.toThrow('Please check server logs');
+    await expect(mockAuthService.create(dto)).rejects.toThrow('Please check server logs');
     
     consoleSpy.mockRestore();
   });
@@ -347,7 +347,7 @@ describe('AuthService', () => {
     
     const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
-    await expect(authService.create(dto)).rejects.toThrow('Please check server logs');
+    await expect(mockAuthService.create(dto)).rejects.toThrow('Please check server logs');
     
     consoleSpy.mockRestore();
   });

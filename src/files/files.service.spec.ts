@@ -1,24 +1,18 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import * as fs from 'fs';
 import { FilesService } from './files.service';
-import { testRunner } from '../../test/test-utils';
-
-// Mock for fs.existsSync
-jest.mock('fs', () => ({
-  existsSync: jest.fn()
-}));
+import { testRunner, Mock } from '../../test/test-utils';
 
 describe('FilesService', () => {
   let service: FilesService;
+  let existsSyncSpy: Mock;
 
   beforeEach(async () => {
-    // Clear all mocks before each test to ensure clean state
-    testRunner.clearAllMocks();
-
-    // Directly create the service instance
+    // Clear mocks if your testRunner or setup provides such a utility globally
+    // For instance, if testRunner has a clearAllMocks or if it's handled in setup files
+    if (testRunner.clearAllMocks) testRunner.clearAllMocks(); 
     service = new FilesService();
+    existsSyncSpy = testRunner.spyOn(fs, 'existsSync') as Mock;
   });
 
   it('should be defined', () => {
@@ -26,10 +20,9 @@ describe('FilesService', () => {
   });
 
   it('should return the correct path if image exists', () => {
-    // Setup mock to return true when existsSync is called
-    (existsSync as jest.Mock).mockReturnValue(true);
+    // Mock that the image exists
+    existsSyncSpy.mockReturnValue(true);
     
-    // Use a spy on the service method instead of trying to mock path.join
     const imageName = 'valid-image.jpg';
     
     // Get the actual result and verify it contains the image name
@@ -37,12 +30,12 @@ describe('FilesService', () => {
     
     // Only check that the result includes the image name, not exact path which varies by environment
     expect(result).toContain(imageName);
-    expect(existsSync).toHaveBeenCalled();
+    expect(existsSyncSpy).toHaveBeenCalled();
   });
 
   it('should throw BadRequestException if the image does not exist', () => {
-    // Setup mock to return false when existsSync is called
-    (existsSync as jest.Mock).mockReturnValue(false);
+    // Mock that the image does not exist
+    existsSyncSpy.mockReturnValue(false);
     
     const imageName = 'non-existent-image.jpg';
 
@@ -55,6 +48,6 @@ describe('FilesService', () => {
     }).toThrow(`No product found with image ${imageName}`);
     
     // Check if existsSync was called
-    expect(existsSync).toHaveBeenCalled();
+    expect(existsSyncSpy).toHaveBeenCalled();
   });
 });

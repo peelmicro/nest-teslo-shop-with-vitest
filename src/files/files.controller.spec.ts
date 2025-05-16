@@ -1,4 +1,3 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { FilesService } from './files.service';
@@ -14,11 +13,11 @@ describe('FilesController', () => {
   beforeEach(() => {
     // Create mocks
     filesService = {
-      getStaticProductImage: jest.fn(),
+      getStaticProductImage: testRunner.fn(),
     } as unknown as FilesService;
     
     configService = {
-      get: jest.fn().mockReturnValue('http://localhost:3000'),
+      get: testRunner.fn().mockReturnValue('http://localhost:3000'),
     } as unknown as ConfigService;
 
     // Directly instantiate the controller with the mocked services
@@ -33,7 +32,7 @@ describe('FilesController', () => {
     const imageName = 'test.jpg';
     const filePath = '/path/to/file.jpg';
     const mockResponse = {
-      sendFile: jest.fn()
+      sendFile: testRunner.fn()
     } as unknown as Response;
 
     testRunner.spyOn(filesService, 'getStaticProductImage').mockReturnValue(filePath);

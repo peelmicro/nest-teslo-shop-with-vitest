@@ -117,7 +117,7 @@ describe('ProductService', () => {
     testRunner.spyOn(productRepository, 'save').mockResolvedValue(product);
     testRunner
       .spyOn(productImageRepository, 'create')
-      .mockImplementation((imageData) => imageData as unknown as ProductImage);
+      .mockImplementation((imageData: unknown) => imageData as unknown as ProductImage);
 
     const result = await service.create(dto, user);
 
@@ -186,7 +186,7 @@ describe('ProductService', () => {
     const result = await service.findOne(productId);
 
     expect(result).toEqual({
-      id: '3686bdc9-1acd-4bbc-9f23-34454294a8fa',
+      id: productId,
       title: 'Product 1',
     });
   });

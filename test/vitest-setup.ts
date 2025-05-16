@@ -99,6 +99,9 @@ const mocks = {
   }
 };
 
+// Mock the 'fs' module globally for Vitest
+vi.mock('fs', () => mocks.fs);
+
 // Create global jest object for compatibility
 Object.defineProperty(global, 'jest', {
   value: {
