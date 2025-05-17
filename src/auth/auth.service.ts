@@ -66,6 +66,9 @@ export class AuthService {
     if (!user.isActive)
       throw new UnauthorizedException('User is inactive, please contact an administrator');
 
+    // Debug: Print password and hash before comparing
+    // eslint-disable-next-line no-console
+    console.log('[E2E DEBUG] Comparing password:', password, 'with hash:', user.password);
     if (!bcrypt.compareSync(password, user.password))
       throw new UnauthorizedException('Credentials are not valid (password)');
 

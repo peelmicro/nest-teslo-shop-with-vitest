@@ -1,21 +1,35 @@
 import { setupTestApp, teardownTestApp } from '../test-setup';
 import { http } from '../../../test/test-utils';
 
-const testingUser = {
-  email: 'testing.user@google.com',
-  password: 'Abc12345',
-  fullName: 'Testing user',
-};
+// Helper to generate a unique email per test
+function uniqueEmail(prefix: string) {
+  return `${prefix}+${Date.now()}_${Math.floor(Math.random() * 100000)}@example.com`;
+}
+
 
 describe('AuthModule Register (e2e)', () => {
   let context: Awaited<ReturnType<typeof setupTestApp>>;
 
-  beforeAll(async () => {
+  let testUserEmails: string[];
+
+
+  beforeEach(async () => {
     context = await setupTestApp();
+    // Generate unique emails for this test
+    testUserEmails = [
+      uniqueEmail('testing.user'),
+      uniqueEmail('test.register'),
+      uniqueEmail('same.email.test'),
+    ];
+    for (const email of testUserEmails) {
+      await context.userRepository.delete({ email });
+    }
   });
 
-  afterAll(async () => {
-    await context.userRepository.delete({ email: testingUser.email });
+  afterEach(async () => {
+    for (const email of testUserEmails) {
+      await context.userRepository.delete({ email });
+    }
     await teardownTestApp(context);
   });
 
@@ -42,10 +56,7 @@ describe('AuthModule Register (e2e)', () => {
   });
 
   it('/auth/register (POST) - same email', async () => {
-    const testEmail = 'same.email.test@example.com';
-    // Clean up before
-    await context.userRepository.delete({ email: testEmail });
-
+    const testEmail = testUserEmails[2];
     // Register the user for the first time
     await http(context.app)
       .post('/auth/register')
@@ -56,7 +67,6 @@ describe('AuthModule Register (e2e)', () => {
       })
       .expect(201)
       .toReturn();
-
     // Try to register with the same email again
     const response = await http(context.app)
       .post('/auth/register')
@@ -74,15 +84,19 @@ describe('AuthModule Register (e2e)', () => {
       statusCode: 400,
     });
 
-    // Clean up after the test
-    await context.userRepository.delete({ email: testEmail });
+
   });
 
   it('/auth/register (POST) - unsafe password', async () => {
+    const testUser = {
+      email: testUserEmails[0],
+      password: 'Abc12345',
+      fullName: 'Testing user',
+    };
     const response = await http(context.app)
       .post('/auth/register')
       .send({
-        ...testingUser,
+        ...testUser,
         password: 'abc123',
       })
       .expect(400)
@@ -98,14 +112,10 @@ describe('AuthModule Register (e2e)', () => {
 
   it('/auth/register (POST) - valid credentials', async () => {
     const testUser = {
-      email: 'test.register@example.com',
+      email: testUserEmails[1],
       password: 'Test12345',
       fullName: 'Test Register User',
     };
-
-    // Clean up before
-    await context.userRepository.delete({ email: testUser.email });
-
     const response = await http(context.app)
       .post('/auth/register')
       .send(testUser)
@@ -123,7 +133,6 @@ describe('AuthModule Register (e2e)', () => {
       token: expect.any(String),
     });
 
-    // Clean up
-    await context.userRepository.delete({ email: testUser.email });
+
   });
 });

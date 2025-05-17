@@ -4,21 +4,24 @@ import { http } from '../../../test/test-utils';
 describe('Auth - Login (e2e)', () => {
   let context: Awaited<ReturnType<typeof setupTestApp>>;
 
-  const testingUser = {
-    email: 'testing.user@google.com',
-    password: 'Abc12345',
-    fullName: 'Testing User',
-  };
+  // Generate unique emails for each test
+  let testingUser: { email: string; password: string; fullName: string };
+  let testingAdminUser: { email: string; password: string; fullName: string };
 
-  const testingAdminUser = {
-    email: 'testing.admin@google.com',
-    password: 'Abc12345',
-    fullName: 'Testing Admin',
-  };
-
-  beforeAll(async () => {
+  beforeEach(async () => {
+    const unique = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    testingUser = {
+      email: `testing.user+${unique}@google.com`,
+      password: 'Abc12345',
+      fullName: 'Testing User',
+    };
+    testingAdminUser = {
+      email: `testing.admin+${unique}@google.com`,
+      password: 'Abc12345',
+      fullName: 'Testing Admin',
+    };
     context = await setupTestApp();
-    // Clean up users if needed
+    // Clean up only the users created for this test
     await context.userRepository.delete({ email: testingUser.email });
     await context.userRepository.delete({ email: testingAdminUser.email });
 
@@ -41,7 +44,10 @@ describe('Auth - Login (e2e)', () => {
     );
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
+    // Clean up only the users created for this test
+    await context.userRepository.delete({ email: testingUser.email });
+    await context.userRepository.delete({ email: testingAdminUser.email });
     await teardownTestApp(context);
   });
 
@@ -103,7 +109,7 @@ describe('Auth - Login (e2e)', () => {
     expect(response.body).toMatchObject({
       user: {
         id: expect.any(String),
-        email: 'testing.user@google.com',
+        email: testingUser.email,
         fullName: 'Testing User',
         isActive: true,
         roles: ['user'],

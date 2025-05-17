@@ -706,6 +706,7 @@ interface HttpUtils {
   post(url: string): {
     set(key: string, value: string): any;
     send(data: any): any;
+    attach(field: string, file: any, filename?: string): any;
     expect(status: number): {
       toReturn(): Promise<TestResponse>;
     };
@@ -722,8 +723,10 @@ interface HttpUtils {
 export const http: (app: INestApplication) => HttpUtils = (app) => {
   // Helper to build up chainable request with .set(), .send(), .expect(), etc.
   function buildRequest(method: 'get' | 'post', url: string, headers: Record<string, string> = {}, data?: any) {
+    // Per-request state isolation
     let _headers = { ...headers };
     let _data = data;
+    let _attachments: Array<[string, any, string?]> = [];
     return {
       set(key: string, value: string) {
         _headers[key] = value;
@@ -733,14 +736,31 @@ export const http: (app: INestApplication) => HttpUtils = (app) => {
         _data = data;
         return this;
       },
+      attach(field: string, file: any, filename?: string) {
+        if (method !== 'post') throw new Error('.attach() is only supported for POST requests');
+        _attachments.push([field, file, filename]);
+        return this;
+      },
       expect(status: number) {
         return {
           toReturn: async () => {
+            // Debug logging for troubleshooting
+            // eslint-disable-next-line no-console
+            console.log('[http-util] Sending request:', { method, url, headers: _headers, attachments: _attachments.length, data: _data });
             let req = request(app.getHttpServer())[method](url);
+            // Automatically set Content-Type for POST requests if not already set
+            if (method === 'post' && !_headers['Content-Type'] && _attachments.length === 0) {
+              req = req.set('Content-Type', 'application/json');
+            }
             for (const [key, value] of Object.entries(_headers)) {
               req = req.set(key, value);
             }
-            if (_data !== undefined && method === 'post') {
+            if (_attachments.length > 0 && method === 'post') {
+              for (const [field, file, filename] of _attachments) {
+                req = filename ? req.attach(field, file, filename) : req.attach(field, file);
+              }
+            }
+            if (_data !== undefined && method === 'post' && _attachments.length === 0) {
               req = req.send(_data);
             }
             const res = await req.expect(status);
