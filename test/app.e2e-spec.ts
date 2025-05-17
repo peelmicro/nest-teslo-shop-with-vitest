@@ -32,7 +32,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('/ (GET) should return 404', async () => {
-    const response = await http(app).get('/');
+    const response = http(app).get('/');
     await response.expect(404).toReturn();
   });
 });
