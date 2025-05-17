@@ -704,47 +704,57 @@ interface TestResponse {
 
 interface HttpUtils {
   post(url: string): {
-    send(data: any): {
-      expect(status: number): {
-        toReturn(): Promise<TestResponse>;
-      };
+    set(key: string, value: string): any;
+    send(data: any): any;
+    expect(status: number): {
+      toReturn(): Promise<TestResponse>;
     };
   };
   get(url: string): {
+    set(key: string, value: string): any;
+    send?(data: any): any; // not used for GET, but for symmetry
     expect(status: number): {
       toReturn(): Promise<TestResponse>;
     };
   };
 }
 
-export const http: (app: INestApplication) => HttpUtils = (app) => ({
-  post: (url) => ({
-    send: (data) => ({
-      expect: (status) => ({
-        toReturn: async () => {
-          const res = await request(app.getHttpServer())
-            .post(url)
-            .send(data)
-            .expect(status);
-          return {
-            status: res.status,
-            body: res.body
-          };
-        }
-      })
-    })
-  }),
-  get: (url) => ({
-    expect: (status) => ({
-      toReturn: async () => {
-        const res = await request(app.getHttpServer())
-          .get(url)
-          .expect(status);
+export const http: (app: INestApplication) => HttpUtils = (app) => {
+  // Helper to build up chainable request with .set(), .send(), .expect(), etc.
+  function buildRequest(method: 'get' | 'post', url: string, headers: Record<string, string> = {}, data?: any) {
+    let _headers = { ...headers };
+    let _data = data;
+    return {
+      set(key: string, value: string) {
+        _headers[key] = value;
+        return this;
+      },
+      send(data: any) {
+        _data = data;
+        return this;
+      },
+      expect(status: number) {
         return {
-          status: res.status,
-          body: res.body
+          toReturn: async () => {
+            let req = request(app.getHttpServer())[method](url);
+            for (const [key, value] of Object.entries(_headers)) {
+              req = req.set(key, value);
+            }
+            if (_data !== undefined && method === 'post') {
+              req = req.send(_data);
+            }
+            const res = await req.expect(status);
+            return {
+              status: res.status,
+              body: res.body
+            };
+          }
         };
       }
-    })
-  })
-});
+    };
+  }
+  return {
+    post: (url: string) => buildRequest('post', url),
+    get: (url: string) => buildRequest('get', url)
+  };
+};
