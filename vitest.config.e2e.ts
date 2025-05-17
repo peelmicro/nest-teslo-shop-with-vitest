@@ -6,12 +6,14 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/e2e/**/*.e2e-spec.ts', 'test/*.e2e-spec.ts'],
-
     deps: {
       interopDefault: true,
-      // For proper ESM/CommonJS interoperability
-      inline: [/supertest/],
-    }
+      optimizer: {
+        ssr: {
+          include: ['supertest'],
+        },
+      },
+    },
   },
   plugins: [
     swc.vite({
@@ -22,4 +24,4 @@ export default defineConfig({
     // This ensures proper CommonJS module resolution
     conditions: ['node'],
   },
-}); 
+});

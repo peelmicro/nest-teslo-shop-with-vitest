@@ -39,7 +39,7 @@ describe('AuthModule Private (e2e)', () => {
     // Update admin roles
     await context.userRepository.update(
       { email: testingAdminUser.email },
-      { roles: ['admin', 'super-user'] }
+      { roles: ['admin', 'super-user'] },
     );
 
     // Login to get tokens
@@ -52,7 +52,10 @@ describe('AuthModule Private (e2e)', () => {
 
     const responseAdmin = await http(context.app)
       .post('/auth/login')
-      .send({ email: testingAdminUser.email, password: testingAdminUser.password })
+      .send({
+        email: testingAdminUser.email,
+        password: testingAdminUser.password,
+      })
       .expect(201)
       .toReturn();
     adminToken = responseAdmin.body.token;
@@ -72,57 +75,20 @@ describe('AuthModule Private (e2e)', () => {
   });
 
   it('should return new token and user if token is provided', async () => {
-    // Register and login to get a valid token for this test
-    const testUser = {
-      email: 'test.token@example.com',
-      password: 'Test12345',
-      fullName: 'Test Token User',
-    };
-    await context.userRepository.delete({ email: testUser.email });
-    await http(context.app)
-      .post('/auth/register')
-      .send(testUser)
-      .expect(201)
-      .toReturn();
-    const loginResponse = await http(context.app)
-      .post('/auth/login')
-      .send({ email: testUser.email, password: testUser.password })
-      .expect(201)
-      .toReturn();
-    const originalToken = loginResponse.body.token;
-    // Add a delay to ensure the new token has a different iat
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const response = await http(context.app)
       .get('/auth/check-status')
-      .set('Authorization', `Bearer ${originalToken}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(200)
       .toReturn();
-    expect(response.body.token).not.toBe(originalToken);
-    // Clean up
-    await context.userRepository.delete({ email: testUser.email });
+    expect(response.body.token).not.toBe(token);
   });
 
   it('should return custom object if token is valid', async () => {
-    const testUser = {
-      email: 'test.private@example.com',
-      password: 'Test12345',
-      fullName: 'Test Private User',
-    };
-    await context.userRepository.delete({ email: testUser.email });
-    await http(context.app)
-      .post('/auth/register')
-      .send(testUser)
-      .expect(201)
-      .toReturn();
-    const loginResponse = await http(context.app)
-      .post('/auth/login')
-      .send({ email: testUser.email, password: testUser.password })
-      .expect(201)
-      .toReturn();
-    const userToken = loginResponse.body.token;
+    // Use shared testingUser and token
     const response = await http(context.app)
       .get('/auth/private')
-      .set('Authorization', `Bearer ${userToken}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(200)
       .toReturn();
     expect(response.body).toMatchObject({
@@ -130,38 +96,20 @@ describe('AuthModule Private (e2e)', () => {
       message: 'Hola Mundo Private',
       user: {
         id: expect.any(String),
-        email: testUser.email,
-        fullName: testUser.fullName,
+        email: testingUser.email,
+        fullName: testingUser.fullName,
         isActive: true,
         roles: ['user'],
       },
-      userEmail: testUser.email,
+      userEmail: testingUser.email,
     });
-    // Clean up
-    await context.userRepository.delete({ email: testUser.email });
   });
 
   it('should return 403 if non-admin user accesses admin route', async () => {
-    const testUser = {
-      email: 'test.nonadmin@example.com',
-      password: 'Test12345',
-      fullName: 'Test Non-Admin User',
-    };
-    await context.userRepository.delete({ email: testUser.email });
-    await http(context.app)
-      .post('/auth/register')
-      .send(testUser)
-      .expect(201)
-      .toReturn();
-    const loginResponse = await http(context.app)
-      .post('/auth/login')
-      .send({ email: testUser.email, password: testUser.password })
-      .expect(201)
-      .toReturn();
-    const userToken = loginResponse.body.token;
+    // Use shared testingUser and token
     const response = await http(context.app)
       .get('/auth/private3')
-      .set('Authorization', `Bearer ${userToken}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(403)
       .toReturn();
     expect(response.body).toMatchObject({
@@ -169,33 +117,22 @@ describe('AuthModule Private (e2e)', () => {
       error: 'Forbidden',
       statusCode: 403,
     });
-    // Clean up
-    await context.userRepository.delete({ email: testUser.email });
   });
 
-    it('should return user if admin token is provided', async () => {
-    const testUser = {
-      email: 'test.admin@example.com',
-      password: 'Test12345',
-      fullName: 'Test Admin User',
-    };
-    await context.userRepository.delete({ email: testUser.email });
-    await http(context.app)
-      .post('/auth/register')
-      .send(testUser)
-      .expect(201)
+  it('should return 403 if admin token is provided', async () => {
+    // Non-admin user should get 403 on /auth/private3
+    const response = await http(context.app)
+      .get('/auth/private3')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403)
       .toReturn();
-    // Update user to have admin role
-    await context.userRepository.update(
-      { email: testUser.email },
-      { roles: ['admin', 'super-user'] }
-    );
-    const loginResponse = await http(context.app)
-      .post('/auth/login')
-      .send({ email: testUser.email, password: testUser.password })
-      .expect(201)
-      .toReturn();
-    const adminToken = loginResponse.body.token;
+    expect(response.body.statusCode).toBe(403);
+    expect(response.body.error).toBe('Forbidden');
+    expect(response.body.message).toContain('need a valid role: [admin]');
+  });
+
+  it('should return user if admin token is provided', async () => {
+    // Use shared adminToken and static admin user
     const response = await http(context.app)
       .get('/auth/private3')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -203,17 +140,15 @@ describe('AuthModule Private (e2e)', () => {
       .toReturn();
     const userId = response.body.user.id;
     expect(validate(userId)).toBe(true);
-    expect(response.body).toMatchObject({
+    expect(response.body).toEqual({
       ok: true,
       user: {
         id: expect.any(String),
-        email: testUser.email,
-        fullName: testUser.fullName,
+        email: testingAdminUser.email,
+        fullName: testingAdminUser.fullName,
         isActive: true,
-        roles: expect.arrayContaining(['admin', 'super-user']),
+        roles: ['admin', 'super-user'],
       },
     });
-    // Clean up
-    await context.userRepository.delete({ email: testUser.email });
   });
 });
