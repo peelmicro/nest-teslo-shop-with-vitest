@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['test/e2e/**/*.e2e-spec.ts'],
+    include: ['test/e2e/**/*.e2e-spec.ts', 'test/*.e2e-spec.ts'],
 
     deps: {
       interopDefault: true,

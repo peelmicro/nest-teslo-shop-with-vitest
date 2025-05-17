@@ -1,56 +1,38 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { AppModule } from './../src/app.module';
-import { testRunner, isVitest } from './test-utils';
+import { http } from './test-utils';
+import { setupTestApp, teardownTestApp } from './e2e/test-setup';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication;
   let moduleFixture: TestingModule;
+  let testContext: any; // To store the test context
 
   beforeAll(async () => {
-    // Skip if running in Vitest (we'll handle Vitest setup differently)
-    if (isVitest) {
-      return;
-    }
-
-    moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+    testContext = await setupTestApp();
+    app = testContext.app;
+    moduleFixture = testContext.module;
   });
 
   afterAll(async () => {
+    // Clean up all resources
+    if (testContext) {
+      await teardownTestApp(testContext);
+    }
     if (app) {
       await app.close();
+    }
+    if (moduleFixture) {
+      await moduleFixture.close();
     }
   });
 
   it('should be defined', () => {
-    if (isVitest) {
-      // For Vitest, we'll mock the app and test the mock
-      const mockApp = {
-        getHttpServer: () => ({
-          get: () => ({}),
-          post: () => ({}),
-        }),
-      };
-      expect(mockApp).toBeDefined();
-    } else {
-      // For Jest, run the actual test
-      expect(app).toBeDefined();
-    }
+    expect(app).toBeDefined();
   });
 
   it('/ (GET) should return 404', async () => {
-    if (isVitest) {
-      // Skip this test in Vitest
-      return;
-    }
-    
-    const response = await request(app.getHttpServer()).get('/');
-    expect(response.status).toBe(404);
+    const response = await http(app).get('/');
+    await response.expect(404).toReturn();
   });
 });
